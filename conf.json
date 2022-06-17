@@ -1,0 +1,11 @@
+{
+    "src_dir": "../数值表",
+    "out_dir": "../LuaData",
+    "data_def": [
+        {
+            "name": "AchievementData",
+            "excel": "成就任务.xlsx",
+            "sheet": "成就任务"
+        }
+    ]
+}
