@@ -60,3 +60,29 @@ func toFloat(r []string) float64 {
 	}
 	return 0.0
 }
+
+func toStr(r []string) string {
+	if r[2] != "" {
+		return r[2]
+	}
+	return ""
+}
+
+func toBool(r []string) bool {
+	if r[2] != "" {
+		if r[2] == "1" {
+			return true
+		}
+		if r[2] == "0" {
+			return false
+		}
+	}
+	return false
+}
+
+func toList(r []string) []interface{} {
+}
+
+func toDict(r []string) map[string]interface{} {
+
+}
