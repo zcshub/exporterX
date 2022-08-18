@@ -69,7 +69,11 @@ func (e *ExcelExporter) PrepareExport() error {
 	}
 
 	if exist, err := pathExists(configData.SrcDir); !exist {
-		log.Panicf("Find src_dir got error: %s", err.Error())
+		if err != nil {
+			log.Panicf("Find src_dir %s got error: %s", configData.SrcDir, err.Error())
+		} else {
+			log.Panicf("Find src_dir %s got failed", configData.SrcDir)
+		}
 	}
 	e.srcDir = configData.SrcDir
 

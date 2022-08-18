@@ -1,6 +1,6 @@
 {
-    "src_dir": "../数值表",
-    "out_dir": "../LuaData",
+    "src_dir": "./数值表",
+    "out_dir": "./OutData",
     "data_def": [
         {
             "name": "AchievementData",

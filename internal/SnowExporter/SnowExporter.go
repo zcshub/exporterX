@@ -14,18 +14,14 @@ const (
 
 func init() {
 	factory.RegisterDataExporter(&SnowExporter{
-		header: Header{
-			make([]string, 0, 4),
-		},
+		header:       make([]*HeadType, 0, 4),
+		defaultValue: make([]interface{}, 0, 4),
 	})
 }
 
-type Header struct {
-	Keys []string
-}
-
 type SnowExporter struct {
-	header Header
+	header       []*HeadType
+	defaultValue []interface{}
 }
 
 func (s *SnowExporter) Version() string {
@@ -66,8 +62,12 @@ func (s *SnowExporter) DoExport(filePath string, outDir string, dataDef conf.Dat
 }
 
 func (s *SnowExporter) ReadType(row []string) {
+	var header *HeadType
+	var defaultValue interface{}
 	for _, v := range row {
-		parseType(v)
+		header, defaultValue = ParseType(v)
+		s.header = append(s.header, header)
+		s.defaultValue = append(s.defaultValue, defaultValue)
 	}
 }
 
