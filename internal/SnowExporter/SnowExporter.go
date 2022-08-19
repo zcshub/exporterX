@@ -1,8 +1,10 @@
 package snowExporter
 
 import (
+	"encoding/json"
 	conf "exporterX/DataExporter"
 	factory "exporterX/DataExporter/Factory"
+	"fmt"
 	"log"
 
 	"github.com/xuri/excelize/v2"
@@ -69,6 +71,8 @@ func (s *SnowExporter) ReadType(row []string) {
 		s.header = append(s.header, header)
 		s.defaultValue = append(s.defaultValue, defaultValue)
 	}
+	res, _ := json.Marshal(s.header)
+	fmt.Println(string(res))
 }
 
 func (s *SnowExporter) ReadRange(row []string) {

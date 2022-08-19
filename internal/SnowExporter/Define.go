@@ -1,6 +1,7 @@
 package snowExporter
 
 import (
+	"fmt"
 	"log"
 	"regexp"
 	"strconv"
@@ -18,12 +19,12 @@ func init() {
 		log.Panicf("regexp.MustCompile failed")
 	}
 	// List类型匹配规则
-	ListDefine = regexp.MustCompile(`List\((\w+)\)`)
+	ListDefine = regexp.MustCompile(`^List\((.+)\)$`)
 	if ListDefine == nil {
 		log.Panicf("regexp.MustCompile failed")
 	}
 	// Dict类型匹配规则
-	DictDefine = regexp.MustCompile(`Dict\(([\w:,]+)\)`)
+	DictDefine = regexp.MustCompile(`^Dict\((.+)\)$`)
 	if DictDefine == nil {
 		log.Panicf("regexp.MustCompile failed")
 	}
@@ -55,7 +56,8 @@ func (h *HeadType) IsNil() bool {
 
 func NewHeadType(name string, nameType string) *HeadType {
 	return &HeadType{
-		Meta: name,
+		Meta:     name,
+		MetaType: nameType,
 	}
 }
 
@@ -82,6 +84,7 @@ func ParseType(v string) (*HeadType, interface{}) {
 }
 
 func parseSecondType(r []string) (*HeadType, interface{}) {
+	fmt.Println(r)
 	if len(r[1]) >= len(ListPrefix) && r[1][0:len(ListPrefix)] == ListPrefix {
 		result := ListDefine.FindStringSubmatch(r[1])
 		if len(result) < 2 {
@@ -102,8 +105,9 @@ func parseSecondType(r []string) (*HeadType, interface{}) {
 			log.Panicf("cannot parse %v", result)
 		}
 
-		kvReg := regexp.MustCompile(`(\w+):(\w+),?`)
+		kvReg := regexp.MustCompile(`(\w+):([\w\(\)]+)`)
 		kvList := kvReg.FindAllStringSubmatch(result[1], -1)
+		fmt.Println(kvList)
 		dictIn := make(map[string]*HeadType)
 		for _, kv := range kvList {
 			dictIn[kv[1]], _ = ParseType(kv[2])
