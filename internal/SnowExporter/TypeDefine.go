@@ -1,7 +1,6 @@
 package snowExporter
 
 import (
-	"fmt"
 	"log"
 	"regexp"
 	"strconv"
@@ -84,7 +83,6 @@ func ParseType(v string) (*HeadType, interface{}) {
 }
 
 func parseSecondType(r []string) (*HeadType, interface{}) {
-	fmt.Println(r)
 	if len(r[1]) >= len(ListPrefix) && r[1][0:len(ListPrefix)] == ListPrefix {
 		result := ListDefine.FindStringSubmatch(r[1])
 		if len(result) < 2 {
@@ -107,7 +105,7 @@ func parseSecondType(r []string) (*HeadType, interface{}) {
 
 		kvReg := regexp.MustCompile(`(\w+):([\w\(\)]+)`)
 		kvList := kvReg.FindAllStringSubmatch(result[1], -1)
-		fmt.Println(kvList)
+		// fmt.Println(kvList)
 		dictIn := make(map[string]*HeadType)
 		for _, kv := range kvList {
 			dictIn[kv[1]], _ = ParseType(kv[2])
@@ -154,12 +152,11 @@ func toStr(r []string) string {
 
 func toBool(r []string) bool {
 	if r[2] != "" {
-		if r[2] == "1" {
-			return true
+		defaultValue, err := strconv.ParseBool(r[2])
+		if err != nil {
+			log.Panicf("Cannot parse %v", r)
 		}
-		if r[2] == "0" {
-			return false
-		}
+		return defaultValue
 	}
 	return false
 }
