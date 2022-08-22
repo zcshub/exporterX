@@ -17,6 +17,7 @@ const (
 
 func init() {
 	factory.RegisterDataExporter(&SnowExporter{
+		logger:       log.New(os.Stdout, "[SnowExporter]: ", log.Lshortfile),
 		headType:     make([]*HeadType, 0, 4),
 		defaultValue: make([]interface{}, 0, 4),
 		header:       make([]*Header, 0, 4),
@@ -24,8 +25,10 @@ func init() {
 }
 
 type SnowExporter struct {
+	logger    *log.Logger
+	exporters map[string]*SnowSingleExporter
+
 	dataDef      *conf.DataDefine
-	logger       *log.Logger
 	headType     []*HeadType
 	defaultValue []interface{}
 	header       []*Header
@@ -34,6 +37,19 @@ type SnowExporter struct {
 
 func (s *SnowExporter) Version() string {
 	return "internal/SnowExporter/SnowExporter"
+}
+
+func (s *SnowExporter) DoExport(filePath string, outDir string, dataDef *conf.DataDefine) error {
+	return nil
+}
+
+type SnowSingleExporter struct {
+	dataDef      *conf.DataDefine
+	logger       *log.Logger
+	headType     []*HeadType
+	defaultValue []interface{}
+	header       []*Header
+	data         [][]interface{}
 }
 
 func (s *SnowExporter) DoExport(filePath string, outDir string, dataDef *conf.DataDefine) error {
