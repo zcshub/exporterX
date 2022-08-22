@@ -17,22 +17,12 @@ const (
 
 func init() {
 	factory.RegisterDataExporter(&SnowExporter{
-		logger:       log.New(os.Stdout, "[SnowExporter]: ", log.Lshortfile),
-		headType:     make([]*HeadType, 0, 4),
-		defaultValue: make([]interface{}, 0, 4),
-		header:       make([]*Header, 0, 4),
+		logger: log.New(os.Stdout, "[SnowExporter]: ", log.Lshortfile),
 	})
 }
 
 type SnowExporter struct {
-	logger    *log.Logger
-	exporters map[string]*SnowSingleExporter
-
-	dataDef      *conf.DataDefine
-	headType     []*HeadType
-	defaultValue []interface{}
-	header       []*Header
-	data         [][]interface{}
+	logger *log.Logger
 }
 
 func (s *SnowExporter) Version() string {
@@ -40,22 +30,29 @@ func (s *SnowExporter) Version() string {
 }
 
 func (s *SnowExporter) DoExport(filePath string, outDir string, dataDef *conf.DataDefine) error {
+	sse := &SnowSingleExporter{
+		logger:       log.New(os.Stdout, "["+dataDef.Name+"] ", log.Lshortfile),
+		dataDef:      dataDef,
+		headType:     make([]*HeadType, 0, 4),
+		defaultValue: make([]interface{}, 0, 4),
+		header:       make([]*Header, 0, 4),
+		data:         make([][]interface{}, 0, 4),
+	}
+	sse.DoExport(filePath, outDir)
 	return nil
 }
 
 type SnowSingleExporter struct {
-	dataDef      *conf.DataDefine
 	logger       *log.Logger
+	dataDef      *conf.DataDefine
 	headType     []*HeadType
 	defaultValue []interface{}
 	header       []*Header
 	data         [][]interface{}
 }
 
-func (s *SnowExporter) DoExport(filePath string, outDir string, dataDef *conf.DataDefine) error {
-	s.dataDef = dataDef
-	s.logger = log.New(os.Stdout, "["+dataDef.Name+"]: ", log.Lshortfile)
-	s.logger.Printf("DoExport [%s]", dataDef.Name)
+func (s *SnowSingleExporter) DoExport(filePath string, outDir string) error {
+	s.logger.Printf("DoExport [%s]", s.dataDef.Name)
 	f, err := excelize.OpenFile(filePath)
 	if err != nil {
 		s.logger.Printf("excelize open %s got error: %s", filePath, err.Error())
@@ -66,7 +63,7 @@ func (s *SnowExporter) DoExport(filePath string, outDir string, dataDef *conf.Da
 		}
 	}()
 
-	rows, err := f.GetRows(dataDef.Sheet)
+	rows, err := f.GetRows(s.dataDef.Sheet)
 	if len(rows) <= 4 {
 		return nil
 	}
@@ -95,7 +92,7 @@ func (s *SnowExporter) DoExport(filePath string, outDir string, dataDef *conf.Da
 	return nil
 }
 
-func (s *SnowExporter) ReadType(row []string) {
+func (s *SnowSingleExporter) ReadType(row []string) {
 	var header *HeadType
 	var defaultValue interface{}
 	for _, v := range row {
@@ -109,17 +106,17 @@ func (s *SnowExporter) ReadType(row []string) {
 	// fmt.Println(string(res2), len(s.defaultValue))
 }
 
-func (s *SnowExporter) ReadRange(row []string) {
+func (s *SnowSingleExporter) ReadRange(row []string) {
 
 }
 
-func (s *SnowExporter) ReadHeader(row []string) {
+func (s *SnowSingleExporter) ReadHeader(row []string) {
 	for i, v := range row {
 		s.header = append(s.header, NewHeader(s.dataDef.Name, v, i, s.headType[i], s.defaultValue[i]))
 	}
 }
 
-func (s *SnowExporter) ReadData(row []string) {
+func (s *SnowSingleExporter) ReadData(row []string) {
 	var header *Header
 	var v interface{}
 	var rowData []interface{}
@@ -154,7 +151,7 @@ func (s *SnowExporter) ReadData(row []string) {
 	}
 }
 
-func (s *SnowExporter) WriteData(outDir string) error {
+func (s *SnowSingleExporter) WriteData(outDir string) error {
 	outputIndexes := make([]int, 0, len(s.header))
 	// 先确认导表列
 	for index, header := range s.header {
