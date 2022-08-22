@@ -13,7 +13,7 @@ var DictDefine *regexp.Regexp
 
 func init() {
 	// 所有head类型匹配规则
-	HeadDefine = regexp.MustCompile(`([\w\(\):,]+)=?(\w*)`)
+	HeadDefine = regexp.MustCompile(`([\w\(\):,]+)=?(.*)`)
 	if HeadDefine == nil {
 		log.Panicf("regexp.MustCompile failed")
 	}

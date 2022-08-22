@@ -1,0 +1,19 @@
+{
+	"DefaultOpen": true,
+	"ID": 2,
+	"SubTab": [
+		"map1"
+	],
+	"SubTabName": "地图1",
+	"Tab": "exploration",
+	"TabName": "quest_exploration_tab",
+	"TopCurrency": [
+		999997
+	],
+	"TopReward": [
+		"EXPLORE_MAP1_20|EXPLORE_MAP1_40|EXPLORE_MAP1_60|EXPLORE_MAP1_80|EXPLORE_MAP1_100"
+	],
+	"TopValue": [
+		"30|60|90|120|150"
+	]
+}

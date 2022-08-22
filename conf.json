@@ -1,11 +1,22 @@
 {
-    "src_dir": "./数值表",
+    "src_dir": "C:/snowstudio/designer_data/数值表",
     "out_dir": "./OutData",
     "data_def": [
         {
             "name": "AchievementData",
             "excel": "成就任务.xlsx",
             "sheet": "成就任务"
+        },
+        {
+            "name": "AchievementTabData",
+            "excel": "成就任务.xlsx",
+            "sheet": "tab列表"
+        },
+        {
+            "name": "ItemData",
+            "excel": "道具表.xlsx",
+            "sheet": "物品表",
+            "rowFile": true
         }
     ]
 }

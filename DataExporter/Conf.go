@@ -4,6 +4,7 @@ type DataDefine struct {
 	Name      string `json:"name"`
 	Excel     string `json:"excel"`
 	Sheet     string `json:"sheet"`
+	RowFile   bool   `json:"rowFile"`
 	IsMapData bool   `json:"is_map"`
 }
 

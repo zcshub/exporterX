@@ -17,8 +17,7 @@ type ConfigParser interface {
 
 type DataExporter interface {
 	Version() string
-	DoExport(filePath string, outDir string, dataDef DataDefine) error
-	WriteData() error
+	DoExport(filePath string, outDir string, dataDef *DataDefine) error
 }
 
 func NewExcelExporter(parser *ConfigParser, exporter *DataExporter, confPath string) *ExcelExporter {
@@ -95,9 +94,10 @@ func (e *ExcelExporter) DoExport() {
 			log.Printf("Ignore %s, %s not exist", dataDef.Name, dataDef.Excel)
 			continue
 		}
+		dataDefCp := dataDef
 		tasks = append(tasks, workpool.Task{
 			Id: dataDef.Name,
-			F:  func() error { return e.exporter.DoExport(filePath, e.outDir, dataDef) },
+			F:  func() error { return e.exporter.DoExport(filePath, e.outDir, &dataDefCp) },
 		})
 	}
 	e.workPool = workpool.NewWorkPool(tasks, 4)

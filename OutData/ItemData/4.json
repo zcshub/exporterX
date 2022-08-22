@@ -1,0 +1,15 @@
+{
+	"DefaultOpen": false,
+	"ID": 4,
+	"SubTab": [],
+	"SubTabName": "",
+	"Tab": "daysTask",
+	"TabName": "novice_quests_event_tab",
+	"TopCurrency": [],
+	"TopReward": [
+		"DaysTask_TaskAward_101|DaysTask_TaskAward_102|DaysTask_TaskAward_103|DaysTask_TaskAward_104|DaysTask_TaskAward_105"
+	],
+	"TopValue": [
+		"10|20|30|40|50"
+	]
+}
