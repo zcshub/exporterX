@@ -17,7 +17,7 @@ type ConfigParser interface {
 
 type DataExporter interface {
 	Version() string
-	DoExport(filePath string, outDir string, dataDef *DataDefine) error
+	DoExport(tool string, filePath string, outDir string, dataDef *DataDefine) error
 }
 
 func NewExcelExporter(parser *ConfigParser, exporter *DataExporter, confPath string) *ExcelExporter {
@@ -34,6 +34,8 @@ type ExcelExporter struct {
 	confPath string
 	srcDir   string
 	outDir   string
+	tool     string
+	cpuNum   int
 	dataDef  []DataDefine
 	workPool *workpool.WorkPool
 }
@@ -81,6 +83,8 @@ func (e *ExcelExporter) PrepareExport() error {
 	}
 	e.outDir = configData.OutDir
 	e.dataDef = configData.DataDef
+	e.tool = configData.Tool
+	e.cpuNum = configData.CpuNum
 
 	return err
 }
@@ -97,10 +101,10 @@ func (e *ExcelExporter) DoExport() {
 		dataDefCp := dataDef
 		tasks = append(tasks, workpool.Task{
 			Id: dataDef.Name,
-			F:  func() error { return e.exporter.DoExport(filePath, e.outDir, &dataDefCp) },
+			F:  func() error { return e.exporter.DoExport(e.tool, filePath, e.outDir, &dataDefCp) },
 		})
 	}
-	e.workPool = workpool.NewWorkPool(tasks, 4)
+	e.workPool = workpool.NewWorkPool(tasks, e.cpuNum)
 	e.workPool.Start()
 	e.workPool.Results()
 }
