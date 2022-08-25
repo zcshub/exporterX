@@ -8,24 +8,37 @@ import (
 )
 
 var HeadDefine *regexp.Regexp
+
 var ListDefine *regexp.Regexp
 var DictDefine *regexp.Regexp
+var EnumDefine *regexp.Regexp
+var FuncDefine *regexp.Regexp
 
 func init() {
 	// 所有head类型匹配规则
 	HeadDefine = regexp.MustCompile(`([\w\(\):,]+)=?(.*)`)
 	if HeadDefine == nil {
-		log.Panicf("regexp.MustCompile failed")
+		log.Panicf("regexp.MustCompile HeadDefine failed")
 	}
 	// List类型匹配规则
 	ListDefine = regexp.MustCompile(`^List\((.+)\)$`)
 	if ListDefine == nil {
-		log.Panicf("regexp.MustCompile failed")
+		log.Panicf("regexp.MustCompile ListDefine failed")
 	}
 	// Dict类型匹配规则
 	DictDefine = regexp.MustCompile(`^Dict\((.+)\)$`)
 	if DictDefine == nil {
-		log.Panicf("regexp.MustCompile failed")
+		log.Panicf("regexp.MustCompile DictDefine failed")
+	}
+	// Enum类型匹配规则
+	EnumDefine = regexp.MustCompile(`^Enum\((.+)\)$`)
+	if EnumDefine == nil {
+		log.Panicf("regexp.MustCompile EnumDefine failed")
+	}
+	// Func类型匹配规则
+	FuncDefine = regexp.MustCompile(`^Func\((.+)\)$`)
+	if FuncDefine == nil {
+		log.Panicf("regexp.MustCompile FuncDefine failed")
 	}
 }
 
@@ -40,6 +53,8 @@ const (
 const (
 	ListPrefix = "List"
 	DictPrefix = "Dict"
+	EnumPrefix = "Enum"
+	FuncPrefix = "Func"
 )
 
 type HeadType struct {
@@ -47,6 +62,7 @@ type HeadType struct {
 	MetaType string
 	ListIn   *HeadType
 	DictIn   map[string]*HeadType
+	EnumIn   map[string]int
 }
 
 func (h *HeadType) IsNil() bool {
@@ -70,13 +86,13 @@ func ParseType(v string) (*HeadType, interface{}) {
 	}
 	switch result[1] {
 	case Int:
-		return NewHeadType(Int, Int), toInt(result)
+		return NewHeadType(Int, Int), toInt(result[2])
 	case Float:
-		return NewHeadType(Float, Float), toFloat(result)
+		return NewHeadType(Float, Float), toFloat(result[2])
 	case Str:
-		return NewHeadType(Str, Str), toStr(result)
+		return NewHeadType(Str, Str), toStr(result[2])
 	case Bool:
-		return NewHeadType(Bool, Bool), toBool(result)
+		return NewHeadType(Bool, Bool), toBool(result[2])
 	default:
 		return parseSecondType(result)
 	}
@@ -86,7 +102,7 @@ func parseSecondType(r []string) (*HeadType, interface{}) {
 	if len(r[1]) >= len(ListPrefix) && r[1][0:len(ListPrefix)] == ListPrefix {
 		result := ListDefine.FindStringSubmatch(r[1])
 		if len(result) < 2 {
-			log.Panicf("cannot parse %v", result)
+			log.Panicf("cannot parse %v %v", r, result)
 		}
 
 		listType, _ := ParseType(result[1])
@@ -100,7 +116,7 @@ func parseSecondType(r []string) (*HeadType, interface{}) {
 	if len(r[1]) >= len(DictPrefix) && r[1][0:len(DictPrefix)] == DictPrefix {
 		result := DictDefine.FindStringSubmatch(r[1])
 		if len(result) < 2 {
-			log.Panicf("cannot parse %v", result)
+			log.Panicf("cannot parse %v %v", r, result)
 		}
 
 		kvReg := regexp.MustCompile(`(\w+):([\w\(\)]+)`)
@@ -117,13 +133,45 @@ func parseSecondType(r []string) (*HeadType, interface{}) {
 		}
 		return ht, nil
 	}
+	if len(r[1]) >= len(EnumPrefix) && r[1][0:len(EnumPrefix)] == EnumPrefix {
+		result := EnumDefine.FindStringSubmatch(r[1])
+		if len(result) < 2 {
+			log.Panicf("cannot parse %v %v", r, result)
+		}
+
+		kvReg := regexp.MustCompile(`(\w+):([\w\(\)]+)`)
+		kvList := kvReg.FindAllStringSubmatch(result[1], -1)
+		// fmt.Println(kvList)
+		enumIn := make(map[string]int)
+		for _, kv := range kvList {
+			enumIn[kv[1]] = toInt(kv[2])
+		}
+		ht := &HeadType{
+			Meta:     r[1],
+			MetaType: EnumPrefix,
+			EnumIn:   enumIn,
+		}
+		return ht, nil
+	}
+	if len(r[1]) >= len(FuncPrefix) && r[1][0:len(FuncPrefix)] == FuncPrefix {
+		result := FuncDefine.FindStringSubmatch(r[1])
+		if len(result) < 2 {
+			log.Panicf("cannot parse %v %v", r, result)
+		}
+
+		return &HeadType{
+			Meta:     "function(" + result[1] + ")",
+			MetaType: FuncPrefix,
+		}, r[2]
+	}
+
 	log.Panicf("Unknown type %s", r[1])
 	return NewHeadType(Int, Int), 0
 }
 
-func toInt(r []string) int {
-	if r[2] != "" {
-		defaultValue, err := strconv.Atoi(r[2])
+func toInt(r string) int {
+	if r != "" {
+		defaultValue, err := strconv.Atoi(r)
 		if err != nil {
 			log.Panicf("Cannot parse %v", r)
 		}
@@ -132,9 +180,9 @@ func toInt(r []string) int {
 	return 0
 }
 
-func toFloat(r []string) float64 {
-	if r[2] != "" {
-		defaultValue, err := strconv.ParseFloat(r[2], 64)
+func toFloat(r string) float64 {
+	if r != "" {
+		defaultValue, err := strconv.ParseFloat(r, 64)
 		if err != nil {
 			log.Panicf("Cannot parse %v", r)
 		}
@@ -143,16 +191,16 @@ func toFloat(r []string) float64 {
 	return 0.0
 }
 
-func toStr(r []string) string {
-	if r[2] != "" {
-		return r[2]
+func toStr(r string) string {
+	if r != "" {
+		return r
 	}
 	return ""
 }
 
-func toBool(r []string) bool {
-	if r[2] != "" {
-		defaultValue, err := strconv.ParseBool(r[2])
+func toBool(r string) bool {
+	if r != "" {
+		defaultValue, err := strconv.ParseBool(r)
 		if err != nil {
 			log.Panicf("Cannot parse %v", r)
 		}

@@ -1,6 +1,6 @@
 {
     "tool": "to_lua",
-    "cpu_num": 1,
+    "cpu_num": 8,
     "src_dir": "D:/WorkSpace/Projects/exporterX/designer_data/数值表",
     "out_dir": "./lua_OutData",
     "help": {

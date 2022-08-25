@@ -4,9 +4,11 @@ import (
 	conf "exporterX/DataExporter"
 	factory "exporterX/DataExporter/Factory"
 	tojson "exporterX/internal/ToJson"
+	tolua "exporterX/internal/ToLua"
 	"log"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/xuri/excelize/v2"
 )
@@ -15,10 +17,13 @@ const (
 	SkipRow = "skiprow"
 )
 
+var LuaHooker *LuaHookManager
+
 func init() {
 	factory.RegisterDataExporter(&SnowExporter{
 		logger: log.New(os.Stdout, "[SnowExporter]: ", log.Lshortfile),
 	})
+	LuaHooker = NewLuaHookManager()
 }
 
 type SnowExporter struct {
@@ -29,14 +34,19 @@ func (s *SnowExporter) Version() string {
 	return "internal/SnowExporter/SnowExporter"
 }
 
-func (s *SnowExporter) DoExport(filePath string, outDir string, dataDef *conf.DataDefine) error {
+func (s *SnowExporter) DoExport(tool string, filePath string, outDir string, dataDef *conf.DataDefine) error {
+	if tool != conf.Tool_To_Lua && tool != conf.Tool_To_Json {
+		panic("Cannot use tool: " + tool)
+	}
 	sse := &SnowSingleExporter{
 		logger:       log.New(os.Stdout, "["+dataDef.Name+"] ", log.Lshortfile),
+		tool:         tool,
 		dataDef:      dataDef,
 		headType:     make([]*HeadType, 0, 4),
 		defaultValue: make([]interface{}, 0, 4),
 		header:       make([]*Header, 0, 4),
 		data:         make([][]interface{}, 0, 4),
+		mapdata:      make(map[string]interface{}),
 	}
 	sse.DoExport(filePath, outDir)
 	return nil
@@ -44,15 +54,17 @@ func (s *SnowExporter) DoExport(filePath string, outDir string, dataDef *conf.Da
 
 type SnowSingleExporter struct {
 	logger       *log.Logger
+	tool         string
 	dataDef      *conf.DataDefine
 	headType     []*HeadType
 	defaultValue []interface{}
 	header       []*Header
 	data         [][]interface{}
+	mapdata      map[string]interface{}
 }
 
 func (s *SnowSingleExporter) DoExport(filePath string, outDir string) error {
-	s.logger.Printf("DoExport [%s]", s.dataDef.Name)
+	s.logger.Printf("DoExport [%s] from %s %s", s.dataDef.Name, s.dataDef.Excel, s.dataDef.Sheet)
 	f, err := excelize.OpenFile(filePath)
 	if err != nil {
 		s.logger.Printf("excelize open %s got error: %s", filePath, err.Error())
@@ -64,7 +76,7 @@ func (s *SnowSingleExporter) DoExport(filePath string, outDir string) error {
 	}()
 
 	rows, err := f.GetRows(s.dataDef.Sheet)
-	if len(rows) <= 4 {
+	if len(rows) <= 3 {
 		return nil
 	}
 	line := 0
@@ -75,29 +87,56 @@ func (s *SnowSingleExporter) DoExport(filePath string, outDir string) error {
 		line++
 	}
 
-	s.ReadType(rows[line])
-	line++
-	s.ReadRange(rows[line])
-	line++
-	s.ReadHeader(rows[line])
-	line++
-
-	for line < len(rows) {
-		s.ReadData(rows[line])
+	if s.dataDef.IsMapData {
+		// 跳过Map数据的第一行标签
 		line++
-	}
 
-	s.WriteData(outDir)
+		for line < len(rows) {
+			s.ReadMapping(rows[line])
+			line++
+		}
+
+		s.WriteMapData(outDir)
+
+	} else {
+
+		s.ReadType(rows[line])
+		line++
+		s.ReadRange(rows[line])
+		line++
+		s.ReadHeader(rows[line])
+		line++
+
+		for line < len(rows) {
+			s.ReadData(rows[line])
+			line++
+		}
+
+		s.WriteData(outDir)
+	}
 
 	return nil
 }
 
+func (s *SnowSingleExporter) ReadMapping(row []string) {
+	// 每一行数据是 Key  Value  Type的形式
+	if len(row) < 3 {
+		return
+	}
+	key := strings.Replace(row[0], " ", "", -1)
+	text := strings.Replace(row[1], " ", "", -1)
+	keyType, defaultValue := ParseType(row[2])
+	header := NewHeader(s.dataDef.Name, key, 1, keyType, defaultValue)
+	value := header.ParseData(text)
+	s.mapdata[key] = value
+}
+
 func (s *SnowSingleExporter) ReadType(row []string) {
-	var header *HeadType
+	var headtype *HeadType
 	var defaultValue interface{}
 	for _, v := range row {
-		header, defaultValue = ParseType(v)
-		s.headType = append(s.headType, header)
+		headtype, defaultValue = ParseType(v)
+		s.headType = append(s.headType, headtype)
 		s.defaultValue = append(s.defaultValue, defaultValue)
 	}
 	// res1, _ := json.Marshal(s.headType)
@@ -151,6 +190,17 @@ func (s *SnowSingleExporter) ReadData(row []string) {
 	}
 }
 
+func (s *SnowSingleExporter) WriteMapData(outDir string) error {
+	if s.tool == conf.Tool_To_Json {
+		toolMan := tojson.NewToJson(s.dataDef.Name, outDir, s.dataDef.RowFile)
+		toolMan.WriteMapData(s.mapdata)
+	} else if s.tool == conf.Tool_To_Lua {
+		toolMan := tolua.NewToLua(s.dataDef.Name, outDir, s.dataDef.RowFile)
+		toolMan.WriteMapData(s.mapdata)
+	}
+	return nil
+}
+
 func (s *SnowSingleExporter) WriteData(outDir string) error {
 	outputIndexes := make([]int, 0, len(s.header))
 	// 先确认导表列
@@ -160,7 +210,7 @@ func (s *SnowSingleExporter) WriteData(outDir string) error {
 		}
 	}
 
-	mapData := make(map[string]map[string]interface{})
+	mapData := make(map[string]interface{})
 	for _, row := range s.data {
 		rowMap := make(map[string]interface{})
 		for _, index := range outputIndexes {
@@ -179,7 +229,12 @@ func (s *SnowSingleExporter) WriteData(outDir string) error {
 
 	}
 
-	toolMan := tojson.NewToJson(s.dataDef.Name, outDir, s.dataDef.RowFile)
-	toolMan.WriteData(mapData)
+	if s.tool == conf.Tool_To_Json {
+		toolMan := tojson.NewToJson(s.dataDef.Name, outDir, s.dataDef.RowFile)
+		toolMan.WriteData(mapData)
+	} else if s.tool == conf.Tool_To_Lua {
+		toolMan := tolua.NewToLua(s.dataDef.Name, outDir, s.dataDef.RowFile)
+		toolMan.WriteData(mapData)
+	}
 	return nil
 }

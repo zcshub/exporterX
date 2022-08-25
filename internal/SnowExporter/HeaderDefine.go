@@ -1,6 +1,7 @@
 package snowExporter
 
 import (
+	"bytes"
 	"log"
 	"os"
 	"strconv"
@@ -13,16 +14,19 @@ type Header struct {
 	index        int
 	headType     *HeadType
 	defaultValue interface{}
+	hooker       func(text string) interface{}
 }
 
 func NewHeader(dataName string, name string, index int, headType *HeadType, defaultValue interface{}) *Header {
 	key := strings.Replace(name, " ", "", -1)
+	hooker := LuaHooker.GetHookHandler(dataName, name)
 	return &Header{
 		logger:       log.New(os.Stdout, "["+dataName+"]: ", log.Lshortfile),
 		name:         key,
 		index:        index,
 		headType:     headType,
 		defaultValue: defaultValue,
+		hooker:       hooker,
 	}
 }
 
@@ -43,10 +47,14 @@ func (h *Header) ParseData(text string) interface{} {
 		return nil
 	}
 	text = strings.Replace(text, " ", "", -1)
+	text = strings.Replace(text, "\n", "", -1)
 	return h.parseByHeadType(text, h.headType, h.defaultValue)
 }
 
 func (h *Header) parseByHeadType(text string, headType *HeadType, defaultValue interface{}) interface{} {
+	if h.hooker != nil {
+		return h.hooker(text)
+	}
 	switch headType.MetaType {
 	case Nil:
 		return nil
@@ -62,6 +70,10 @@ func (h *Header) parseByHeadType(text string, headType *HeadType, defaultValue i
 		return h.parseList(text, headType)
 	case DictPrefix:
 		return h.parseDict(text, headType)
+	case EnumPrefix:
+		return h.parseEnum(text, headType)
+	case FuncPrefix:
+		return h.parseFunc(text, headType)
 	default:
 		h.logger.Panicf("Cannot understand metaType %s", headType.MetaType)
 	}
@@ -178,11 +190,36 @@ func (h *Header) parseDict(text string, headType *HeadType) map[string]interface
 	}
 
 	for k, v := range kvMap {
-		if headType.DictIn[k] == nil {
-			log.Panicf("key %s not exist in dict %s", k, headType.Meta)
+		if _, ok := headType.DictIn[k]; !ok {
+			h.logger.Panicf("key %s not exist in dict %s", k, headType.Meta)
 		}
 		dict[k] = h.parseByHeadType(v, headType.DictIn[k], nil)
 	}
 
 	return dict
+}
+
+func (h *Header) parseEnum(text string, headType *HeadType) int {
+	if text == "" {
+		return 0
+	}
+	if _, ok := headType.EnumIn[text]; ok {
+		return headType.EnumIn[text]
+	}
+	h.logger.Panicf("%s not in Enum %v", text, headType.EnumIn)
+	return 0
+}
+
+func (h *Header) parseFunc(text string, headType *HeadType) string {
+	var buffer bytes.Buffer
+	buffer.WriteString(headType.Meta)
+	buffer.WriteString(" ")
+	if text == "" {
+		buffer.WriteString(h.defaultValue.(string))
+	} else {
+		buffer.WriteString("return ")
+		buffer.WriteString(text)
+	}
+	buffer.WriteString(" end")
+	return buffer.String()
 }

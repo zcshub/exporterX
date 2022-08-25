@@ -20,7 +20,13 @@ type DataExporter interface {
 	DoExport(tool string, filePath string, outDir string, dataDef *DataDefine) error
 }
 
-func NewExcelExporter(parser *ConfigParser, exporter *DataExporter, confPath string) *ExcelExporter {
+type OptionalConf struct {
+	CpuNum int
+	SrcDir string
+	OutDir string
+}
+
+func NewExcelExporter(parser *ConfigParser, exporter *DataExporter, confPath string, opt *OptionalConf) *ExcelExporter {
 	return &ExcelExporter{
 		parser:   *parser,
 		exporter: *exporter,
