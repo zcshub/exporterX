@@ -110,3 +110,12 @@ end
 ## 导出数据特性 (程序关注)
 
 所有导出的表字段不会是nil，无需再进行判断。 比如List为空就是一个空列表。
+函数Func返回固定长度为2的数组，第一个是类型，第二个是数据。 
++ 数值类型1      比如1  比如1.2
++ Switch类型2    比如 Switch:[1,1,0.8],[2,2,0.85],[3,3,0.9],[4,4,0.95],[5,5,1]
+    Switch:[first1,second1,third1],[first2,second2,third2]...
+    解释： 如果参数在闭区间[first,second]，取值为third
++ Awaken类型3  比如 Awaken:0.1,0.2
+    Awaken:first,second
+    解释: 如果参数是true，取值first；参数是false，取值second
++ Func1类型4

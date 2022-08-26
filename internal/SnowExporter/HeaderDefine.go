@@ -1,11 +1,13 @@
 package snowExporter
 
 import (
-	"bytes"
+	"fmt"
 	"log"
 	"os"
 	"strconv"
 	"strings"
+
+	lua "github.com/yuin/gopher-lua"
 )
 
 type Header struct {
@@ -15,9 +17,10 @@ type Header struct {
 	headType     *HeadType
 	defaultValue interface{}
 	hooker       func(text string) interface{}
+	luaState     *lua.LState
 }
 
-func NewHeader(dataName string, name string, index int, headType *HeadType, defaultValue interface{}) *Header {
+func NewHeader(n int, dataName string, name string, index int, headType *HeadType, defaultValue interface{}) *Header {
 	key := strings.Replace(name, " ", "", -1)
 	hooker := LuaHooker.GetHookHandler(dataName, name)
 	return &Header{
@@ -27,7 +30,12 @@ func NewHeader(dataName string, name string, index int, headType *HeadType, defa
 		headType:     headType,
 		defaultValue: defaultValue,
 		hooker:       hooker,
+		luaState:     LuaStates[n],
 	}
+}
+
+func (h *Header) SetLoggerPrefix(p string) {
+	h.logger.SetPrefix(p)
 }
 
 func (h *Header) Key() string {
@@ -75,7 +83,7 @@ func (h *Header) parseByHeadType(text string, headType *HeadType, defaultValue i
 	case FuncPrefix:
 		return h.parseFunc(text, headType)
 	default:
-		h.logger.Panicf("Cannot understand metaType %s", headType.MetaType)
+		h.logger.Panicf("Cannot understand metaType %s when meet %s", headType.MetaType, text)
 	}
 	return nil
 }
@@ -210,16 +218,95 @@ func (h *Header) parseEnum(text string, headType *HeadType) int {
 	return 0
 }
 
-func (h *Header) parseFunc(text string, headType *HeadType) string {
-	var buffer bytes.Buffer
-	buffer.WriteString(headType.Meta)
-	buffer.WriteString(" ")
+var CoefficientsOfUnaryQuadraticExpressionFormat = `
+	local expression = function(x) return %s end
+	local a, b, c = 0, 0, 0
+	c = expression(0)
+	local a_add_b = expression(1) - c
+	local a_sub_b = expression(-1) - c
+	return (a_add_b + a_sub_b)/2, (a_add_b - a_sub_b)/2, c
+`
+
+func (h *Header) parseFunc(text string, headType *HeadType) []interface{} {
 	if text == "" {
-		buffer.WriteString(h.defaultValue.(string))
-	} else {
-		buffer.WriteString("return ")
-		buffer.WriteString(text)
+		return []interface{}{1, h.defaultValue.(int)}
 	}
-	buffer.WriteString(" end")
-	return buffer.String()
+
+	textLength := len(text)
+
+	if textLength >= len(FuncSwitch) && text[:len(FuncSwitch)] == FuncSwitch {
+		switchParam := h.parseList(text[len(FuncSwitch)+1:], &HeadType{
+			Meta:     "List(List(Str))",
+			MetaType: "List",
+			ListIn: &HeadType{
+				Meta:     "List(Str)",
+				MetaType: "List",
+				ListIn: &HeadType{
+					Meta:     "Str",
+					MetaType: "Str",
+				},
+			},
+		})
+		r := make([]interface{}, 0, len(switchParam))
+		for _, group := range switchParam {
+			group := group.([]interface{})
+			first, err := strconv.ParseFloat(group[0].(string), 64)
+			if err != nil {
+				h.logger.Panicf("%s parse failed %s", text, err)
+			}
+			second, err := strconv.ParseFloat(group[1].(string), 64)
+			if err != nil {
+				h.logger.Panicf("%s parse failed %s", text, err)
+			}
+			expression := group[2].(string)
+			err = h.luaState.DoString(fmt.Sprintf(CoefficientsOfUnaryQuadraticExpressionFormat, expression))
+			if err != nil {
+				h.logger.Panicf("%s run lua failed %s", text, err)
+			}
+			a, b, c := h.luaState.Get(-3), h.luaState.Get(-2), h.luaState.Get(-1)
+			af, bf, cf := float64(lua.LVAsNumber(a)), float64(lua.LVAsNumber(b)), float64(lua.LVAsNumber(c))
+			h.luaState.Pop(3)
+			r = append(r, []interface{}{first, second, []interface{}{af, bf, cf}})
+		}
+		return []interface{}{
+			2,
+			r,
+		}
+	}
+
+	if textLength >= len(FuncAwaken) && text[:len(FuncAwaken)] == FuncAwaken {
+		return []interface{}{
+			3,
+			h.parseList(text[len(FuncAwaken)+1:], &HeadType{
+				Meta:     "List(Float)",
+				MetaType: "List",
+				ListIn: &HeadType{
+					Meta:     "Float",
+					MetaType: "Float",
+				},
+			}),
+		}
+	}
+
+	// 针对一元二次表达式的，必须是3个返回，a*x*x+b*x+c, 返回a,b,c
+	if textLength >= len(FuncFunc1) && text[:len(FuncFunc1)] == FuncFunc1 {
+		expression := text[len(FuncFunc1)+1:]
+		err := h.luaState.DoString(fmt.Sprintf(CoefficientsOfUnaryQuadraticExpressionFormat, expression))
+		if err != nil {
+			h.logger.Panicf("%s run lua failed %s", text, err)
+		}
+		a, b, c := h.luaState.Get(-3), h.luaState.Get(-2), h.luaState.Get(-1)
+		h.luaState.Pop(3)
+
+		return []interface{}{
+			4,
+			[]interface{}{float64(lua.LVAsNumber(a)), float64(lua.LVAsNumber(b)), float64(lua.LVAsNumber(c))},
+		}
+	}
+
+	value, err := strconv.ParseFloat(text, 64)
+	if err != nil {
+		h.logger.Panicf("%s parse to float64 failed %s", text, err)
+	}
+	return []interface{}{1, value}
 }

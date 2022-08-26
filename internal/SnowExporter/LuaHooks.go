@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"strconv"
+	"strings"
 	"sync"
 
 	lua "github.com/yuin/gopher-lua"
@@ -42,6 +43,19 @@ func (m *LuaHookManager) CompileLuaFile(filePath string) (*lua.FunctionProto, er
 		return nil, err
 	}
 	proto, err := lua.Compile(chunk, filePath)
+	if err != nil {
+		return nil, err
+	}
+	return proto, nil
+}
+
+func (m *LuaHookManager) CompileLuaString(source string) (*lua.FunctionProto, error) {
+	reader := strings.NewReader(source)
+	chunk, err := parse.Parse(reader, "<string>")
+	if err != nil {
+		return nil, err
+	}
+	proto, err := lua.Compile(chunk, "<string>")
 	if err != nil {
 		return nil, err
 	}

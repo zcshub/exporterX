@@ -1,13 +1,16 @@
 package workpool
 
+import "os"
+
 type Task struct {
-	Id  string
-	Err error
-	F   func() error
+	Id   string
+	Info string
+	Err  error
+	F    func(int) (string, error)
 }
 
-func (task *Task) Do() error {
-	return task.F()
+func (task *Task) Do(n int) (string, error) {
+	return task.F(n)
 }
 
 type WorkPool struct {
@@ -37,13 +40,18 @@ func NewWorkPool(tasks []Task, poolsize int) *WorkPool {
 
 func (p *WorkPool) Start() {
 	for i := 0; i < p.PoolSize; i++ {
-		go p.work()
+		go p.work(i)
 	}
 }
 
-func (p *WorkPool) work() {
+func (p *WorkPool) work(n int) {
+	defer func() {
+		if e := recover(); e != nil {
+			os.Exit(1)
+		}
+	}()
 	for task := range p.tasksChan {
-		task.Err = task.Do()
+		task.Info, task.Err = task.Do(n)
 		p.resultsChan <- task
 	}
 }

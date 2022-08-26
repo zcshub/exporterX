@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/xuri/excelize/v2"
+	lua "github.com/yuin/gopher-lua"
 )
 
 const (
@@ -18,6 +19,7 @@ const (
 )
 
 var LuaHooker *LuaHookManager
+var LuaStates []*lua.LState
 
 func init() {
 	factory.RegisterDataExporter(&SnowExporter{
@@ -34,12 +36,13 @@ func (s *SnowExporter) Version() string {
 	return "internal/SnowExporter/SnowExporter"
 }
 
-func (s *SnowExporter) DoExport(tool string, filePath string, outDir string, dataDef *conf.DataDefine) error {
+func (s *SnowExporter) DoExport(n int, tool string, filePath string, outDir string, dataDef *conf.DataDefine) (string, error) {
 	if tool != conf.Tool_To_Lua && tool != conf.Tool_To_Json {
 		panic("Cannot use tool: " + tool)
 	}
 	sse := &SnowSingleExporter{
 		logger:       log.New(os.Stdout, "["+dataDef.Name+"] ", log.Lshortfile),
+		n:            n,
 		tool:         tool,
 		dataDef:      dataDef,
 		headType:     make([]*HeadType, 0, 4),
@@ -48,12 +51,19 @@ func (s *SnowExporter) DoExport(tool string, filePath string, outDir string, dat
 		data:         make([][]interface{}, 0, 4),
 		mapdata:      make(map[string]interface{}),
 	}
-	sse.DoExport(filePath, outDir)
-	return nil
+	return sse.DoExport(filePath, outDir)
+}
+
+func (s *SnowExporter) SetCpuNum(n int) {
+	LuaStates = make([]*lua.LState, n)
+	for i := 0; i < n; i++ {
+		LuaStates[i] = lua.NewState()
+	}
 }
 
 type SnowSingleExporter struct {
 	logger       *log.Logger
+	n            int
 	tool         string
 	dataDef      *conf.DataDefine
 	headType     []*HeadType
@@ -63,7 +73,7 @@ type SnowSingleExporter struct {
 	mapdata      map[string]interface{}
 }
 
-func (s *SnowSingleExporter) DoExport(filePath string, outDir string) error {
+func (s *SnowSingleExporter) DoExport(filePath string, outDir string) (string, error) {
 	s.logger.Printf("DoExport [%s] from %s %s", s.dataDef.Name, s.dataDef.Excel, s.dataDef.Sheet)
 	f, err := excelize.OpenFile(filePath)
 	if err != nil {
@@ -77,7 +87,7 @@ func (s *SnowSingleExporter) DoExport(filePath string, outDir string) error {
 
 	rows, err := f.GetRows(s.dataDef.Sheet)
 	if len(rows) <= 3 {
-		return nil
+		return "", nil
 	}
 	line := 0
 	for {
@@ -115,7 +125,7 @@ func (s *SnowSingleExporter) DoExport(filePath string, outDir string) error {
 		s.WriteData(outDir)
 	}
 
-	return nil
+	return s.dataDef.Name, nil
 }
 
 func (s *SnowSingleExporter) ReadMapping(row []string) {
@@ -126,7 +136,7 @@ func (s *SnowSingleExporter) ReadMapping(row []string) {
 	key := strings.Replace(row[0], " ", "", -1)
 	text := strings.Replace(row[1], " ", "", -1)
 	keyType, defaultValue := ParseType(row[2])
-	header := NewHeader(s.dataDef.Name, key, 1, keyType, defaultValue)
+	header := NewHeader(s.n, s.dataDef.Name, key, 1, keyType, defaultValue)
 	value := header.ParseData(text)
 	s.mapdata[key] = value
 }
@@ -150,8 +160,11 @@ func (s *SnowSingleExporter) ReadRange(row []string) {
 }
 
 func (s *SnowSingleExporter) ReadHeader(row []string) {
+	if len(row) > len(s.headType) {
+		s.logger.Panicf("type length %d dont match key %v length %d", len(s.headType), row, len(row))
+	}
 	for i, v := range row {
-		s.header = append(s.header, NewHeader(s.dataDef.Name, v, i, s.headType[i], s.defaultValue[i]))
+		s.header = append(s.header, NewHeader(s.n, s.dataDef.Name, v, i, s.headType[i], s.defaultValue[i]))
 	}
 }
 
@@ -161,6 +174,9 @@ func (s *SnowSingleExporter) ReadData(row []string) {
 	var rowData []interface{}
 	for i := 0; i < len(s.header); i++ {
 		header = s.header[i]
+		if len(row) > 0 {
+			header.SetLoggerPrefix(s.dataDef.Name + ": " + row[0] + " ")
+		}
 		if i >= len(row) {
 			v = header.ParseData("")
 		} else {
@@ -176,15 +192,7 @@ func (s *SnowSingleExporter) ReadData(row []string) {
 		}
 		rowData = append(rowData, v)
 	}
-	// for index, text := range row {
-	// 	header = s.header[index]
-	// 	v = header.ParseData(text)
-	// 	if header.IsExportFlag() && v.(bool) == false {
-	// 		// 如果设置了导表标签并且该行不导表直接跳过这行数据
-	// 		return
-	// 	}
-	// 	rowData = append(rowData, v)
-	// }
+
 	if len(rowData) > 0 && rowData[0] != nil {
 		s.data = append(s.data, rowData)
 	}

@@ -84,7 +84,7 @@ func (t *ToLua) optimizeDataForLuaUse(data map[string]interface{}) (map[string]i
 	keys := make(map[string]int)
 	index := 0
 	for _, row := range data {
-		for key, _ := range row.(map[string]interface{}) {
+		for key := range row.(map[string]interface{}) {
 			index += 1
 			keys[key] = index
 		}

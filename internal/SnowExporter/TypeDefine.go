@@ -57,6 +57,12 @@ const (
 	FuncPrefix = "Func"
 )
 
+const (
+	FuncFunc1  = "Func1" // 针对一元二次表达式
+	FuncSwitch = "Switch"
+	FuncAwaken = "Awaken"
+)
+
 type HeadType struct {
 	Meta     string
 	MetaType string
@@ -154,15 +160,10 @@ func parseSecondType(r []string) (*HeadType, interface{}) {
 		return ht, nil
 	}
 	if len(r[1]) >= len(FuncPrefix) && r[1][0:len(FuncPrefix)] == FuncPrefix {
-		result := FuncDefine.FindStringSubmatch(r[1])
-		if len(result) < 2 {
-			log.Panicf("cannot parse %v %v", r, result)
-		}
-
 		return &HeadType{
-			Meta:     "function(" + result[1] + ")",
+			Meta:     r[1],
 			MetaType: FuncPrefix,
-		}, r[2]
+		}, toInt(r[2])
 	}
 
 	log.Panicf("Unknown type %s", r[1])

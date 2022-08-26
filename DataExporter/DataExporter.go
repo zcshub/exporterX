@@ -17,33 +17,40 @@ type ConfigParser interface {
 
 type DataExporter interface {
 	Version() string
-	DoExport(tool string, filePath string, outDir string, dataDef *DataDefine) error
+	DoExport(n int, tool string, filePath string, outDir string, dataDef *DataDefine) (string, error)
+	SetCpuNum(int)
 }
 
 type OptionalConf struct {
-	CpuNum int
-	SrcDir string
-	OutDir string
+	CpuNum     int
+	SrcDir     string
+	OutDir     string
+	ExportList []string
 }
 
 func NewExcelExporter(parser *ConfigParser, exporter *DataExporter, confPath string, opt *OptionalConf) *ExcelExporter {
 	return &ExcelExporter{
-		parser:   *parser,
-		exporter: *exporter,
-		confPath: confPath,
+		parser:     *parser,
+		exporter:   *exporter,
+		confPath:   confPath,
+		cpuNum:     opt.CpuNum,
+		srcDir:     opt.SrcDir,
+		outDir:     opt.OutDir,
+		exportList: opt.ExportList,
 	}
 }
 
 type ExcelExporter struct {
-	parser   ConfigParser
-	exporter DataExporter
-	confPath string
-	srcDir   string
-	outDir   string
-	tool     string
-	cpuNum   int
-	dataDef  []DataDefine
-	workPool *workpool.WorkPool
+	parser     ConfigParser
+	exporter   DataExporter
+	confPath   string
+	srcDir     string
+	outDir     string
+	tool       string
+	cpuNum     int
+	dataDef    []DataDefine
+	exportList []string
+	workPool   *workpool.WorkPool
 }
 
 func (e *ExcelExporter) PrintExporterInfo() {
@@ -75,6 +82,32 @@ func (e *ExcelExporter) PrepareExport() error {
 		log.Panicf("ParseConfigFile %s got error: %s", e.confPath, err.Error())
 	}
 
+	e.tool = configData.Tool
+	if e.srcDir == "" {
+		e.srcDir = configData.SrcDir
+	}
+	if e.outDir == "" {
+		e.outDir = configData.OutDir
+	}
+	if e.cpuNum == 0 {
+		e.cpuNum = configData.CpuNum
+	}
+	e.exporter.SetCpuNum(e.cpuNum)
+
+	if e.exportList != nil && len(e.exportList) > 0 {
+		e.dataDef = make([]DataDefine, 0, len(e.exportList))
+		for _, dataDef := range configData.DataDef {
+			for _, name := range e.exportList {
+				if dataDef.Name == name {
+					e.dataDef = append(e.dataDef, dataDef)
+				}
+			}
+		}
+	} else {
+		e.dataDef = configData.DataDef
+	}
+	e.exportList = nil
+
 	if exist, err := pathExists(configData.SrcDir); !exist {
 		if err != nil {
 			log.Panicf("Find src_dir %s got error: %s", configData.SrcDir, err.Error())
@@ -82,15 +115,14 @@ func (e *ExcelExporter) PrepareExport() error {
 			log.Panicf("Find src_dir %s got failed", configData.SrcDir)
 		}
 	}
-	e.srcDir = configData.SrcDir
 
 	if err = makePathExists(configData.OutDir); err != nil {
 		log.Panicf("Make out_dir got error: %s", err.Error())
 	}
-	e.outDir = configData.OutDir
-	e.dataDef = configData.DataDef
-	e.tool = configData.Tool
-	e.cpuNum = configData.CpuNum
+
+	fmt.Printf("cpu: %v\n", e.cpuNum)
+	fmt.Printf("src: %v\n", e.srcDir)
+	fmt.Printf("out: %v\n", e.outDir)
 
 	return err
 }
@@ -107,7 +139,7 @@ func (e *ExcelExporter) DoExport() {
 		dataDefCp := dataDef
 		tasks = append(tasks, workpool.Task{
 			Id: dataDef.Name,
-			F:  func() error { return e.exporter.DoExport(e.tool, filePath, e.outDir, &dataDefCp) },
+			F:  func(i int) (string, error) { return e.exporter.DoExport(i, e.tool, filePath, e.outDir, &dataDefCp) },
 		})
 	}
 	e.workPool = workpool.NewWorkPool(tasks, e.cpuNum)
