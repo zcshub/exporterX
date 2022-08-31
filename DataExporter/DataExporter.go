@@ -56,16 +56,16 @@ type ExcelExporter struct {
 }
 
 func (e *ExcelExporter) PrintExporterInfo() {
-	fmt.Println("------------------------------------------------------")
+	log.Println("------------------------------------------------------")
 	if e.parser == nil {
 		panic("No Parser tool registered")
 	}
-	fmt.Printf("Parser tool is [%s].\n", e.parser.Version())
+	log.Printf("Parser tool is [%s].\n", e.parser.Version())
 	if e.exporter == nil {
 		panic("No Exporter tool registered")
 	}
-	fmt.Printf("Exporter tool is [%s].\n", e.exporter.Version())
-	fmt.Println("------------------------------------------------------")
+	log.Printf("Exporter tool is [%s].\n", e.exporter.Version())
+	log.Println("------------------------------------------------------")
 }
 
 func (e *ExcelExporter) PrepareExport() error {
@@ -114,9 +114,9 @@ func (e *ExcelExporter) PrepareExport() error {
 		log.Panicf("Make out_dir got error: %s", err.Error())
 	}
 
-	fmt.Printf("cpu: %v\n", e.cpuNum)
-	fmt.Printf("src: %v\n", e.srcDir)
-	fmt.Printf("out: %v\n", e.outDir)
+	log.Printf("cpu: %v\n", e.cpuNum)
+	log.Printf("src: %v\n", e.srcDir)
+	log.Printf("out: %v\n", e.outDir)
 
 	return err
 }
@@ -146,16 +146,18 @@ func (e *ExcelExporter) DoExport() {
 	results := e.workPool.Results()
 
 	for _, ignore := range ignores {
-		log.Printf(ignore)
+		log.Fatalf(ignore)
 	}
 
 	for _, dataDef := range e.dataDef {
 		if _, ok := results[dataDef.Name]; ok {
 			delete(results, dataDef.Name)
 		} else {
-			log.Printf("%s export failed", dataDef.Name)
+			log.Fatalf("%s export failed", dataDef.Name)
 		}
 	}
+
+	log.Println("DoExport Success!  (*^__^*)")
 }
 
 func (e *ExcelExporter) AfterExportData() {

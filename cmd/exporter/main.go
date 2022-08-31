@@ -2,7 +2,7 @@ package main
 
 import (
 	"flag"
-	"fmt"
+	"log"
 	"math"
 	"runtime"
 
@@ -42,7 +42,7 @@ func main() {
 	// pprof.StartCPUProfile(f)
 	flag.Var(&exportList, "name", "DataName to export, access for multi name")
 	flag.Parse()
-	fmt.Printf("conf: %v\n", *confPath)
+	log.Printf("conf: %v\n", *confPath)
 
 	optionalConf := &app.OptionalConf{
 		CpuNum:     *cpuNum,

@@ -5,7 +5,6 @@ import (
 	factory "exporterX/DataExporter/Factory"
 	tojson "exporterX/internal/ToJson"
 	tolua "exporterX/internal/ToLua"
-	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -171,7 +170,6 @@ func (s *SnowSingleExporter) DoExport(filePath string, outDir string) (string, e
 	}
 
 	if s.cache {
-		fmt.Println(s.dataDef.Name)
 		LuaHooker.GlobalProcessReceiveData(s.dataDef.Name, s.mapdata)
 	}
 
@@ -200,9 +198,9 @@ func (s *SnowSingleExporter) ReadType(row []string) {
 		s.defaultValue = append(s.defaultValue, defaultValue)
 	}
 	// res1, _ := json.Marshal(s.headType)
-	// fmt.Println(string(res1), len(s.headType))
+	// log.Println(string(res1), len(s.headType))
 	// res2, _ := json.Marshal(s.defaultValue)
-	// fmt.Println(string(res2), len(s.defaultValue))
+	// log.Println(string(res2), len(s.defaultValue))
 }
 
 func (s *SnowSingleExporter) ReadRange(row []string) {

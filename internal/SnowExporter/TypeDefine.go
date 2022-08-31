@@ -127,7 +127,7 @@ func parseSecondType(r []string) (*HeadType, interface{}) {
 
 		kvReg := regexp.MustCompile(`(\w+):([\w\(\)]+)`)
 		kvList := kvReg.FindAllStringSubmatch(result[1], -1)
-		// fmt.Println(kvList)
+		// log.Println(kvList)
 		dictIn := make(map[string]*HeadType)
 		for _, kv := range kvList {
 			dictIn[kv[1]], _ = ParseType(kv[2])
@@ -147,7 +147,7 @@ func parseSecondType(r []string) (*HeadType, interface{}) {
 
 		kvReg := regexp.MustCompile(`(\w+):([\w\(\)]+)`)
 		kvList := kvReg.FindAllStringSubmatch(result[1], -1)
-		// fmt.Println(kvList)
+		// log.Println(kvList)
 		enumIn := make(map[string]int)
 		for _, kv := range kvList {
 			enumIn[kv[1]] = toInt(kv[2])
