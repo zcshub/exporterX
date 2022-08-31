@@ -5,10 +5,12 @@ import (
 	factory "exporterX/DataExporter/Factory"
 	tojson "exporterX/internal/ToJson"
 	tolua "exporterX/internal/ToLua"
+	"fmt"
 	"log"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/xuri/excelize/v2"
 	lua "github.com/yuin/gopher-lua"
@@ -29,7 +31,21 @@ func init() {
 }
 
 type SnowExporter struct {
-	logger *log.Logger
+	logger              *log.Logger
+	cacheMap            map[string]bool
+	lock                sync.Mutex
+	cacheSingleExporter map[string]*SnowSingleExporter
+}
+
+func (s *SnowExporter) Init() {
+	cacheNameList := LuaHooker.InitGlobalProcess()
+	if cacheNameList != nil && len(cacheNameList) > 0 {
+		s.cacheMap = make(map[string]bool)
+		for _, cacheName := range cacheNameList {
+			s.cacheMap[cacheName] = true
+		}
+	}
+	s.cacheSingleExporter = make(map[string]*SnowSingleExporter)
 }
 
 func (s *SnowExporter) Version() string {
@@ -44,6 +60,8 @@ func (s *SnowExporter) DoExport(n int, tool string, filePath string, outDir stri
 		logger:       log.New(os.Stdout, "["+dataDef.Name+"] ", log.Lshortfile),
 		n:            n,
 		tool:         tool,
+		filePath:     filePath,
+		outDir:       outDir,
 		dataDef:      dataDef,
 		headType:     make([]*HeadType, 0, 4),
 		defaultValue: make([]interface{}, 0, 4),
@@ -51,6 +69,13 @@ func (s *SnowExporter) DoExport(n int, tool string, filePath string, outDir stri
 		data:         make([][]interface{}, 0, 4),
 		mapdata:      make(map[string]interface{}),
 	}
+
+	if _, exist := s.cacheMap[dataDef.Name]; exist {
+		sse.cache = true
+	}
+	s.lock.Lock()
+	s.cacheSingleExporter[dataDef.Name] = sse
+	s.lock.Unlock()
 	return sse.DoExport(filePath, outDir)
 }
 
@@ -61,16 +86,32 @@ func (s *SnowExporter) SetCpuNum(n int) {
 	}
 }
 
+func (s *SnowExporter) AfterExport() {
+	LuaHooker.GlobalProcessCacheData()
+	dataName2MapData := LuaHooker.GlobalProcessGetChangedData()
+	for name, mapData := range dataName2MapData {
+		s.logger.Printf("Rewrite %s", name)
+		if exporter, ok := s.cacheSingleExporter[name]; ok {
+			exporter.WriteDataFromLua(mapData)
+		}
+	}
+}
+
 type SnowSingleExporter struct {
 	logger       *log.Logger
 	n            int
 	tool         string
+	filePath     string
+	outDir       string
 	dataDef      *conf.DataDefine
 	headType     []*HeadType
 	defaultValue []interface{}
 	header       []*Header
 	data         [][]interface{}
 	mapdata      map[string]interface{}
+	cache        bool
+	keysOrder    []string
+	rowsOrder    []string
 }
 
 func (s *SnowSingleExporter) DoExport(filePath string, outDir string) (string, error) {
@@ -86,7 +127,11 @@ func (s *SnowSingleExporter) DoExport(filePath string, outDir string) (string, e
 	}()
 
 	rows, err := f.GetRows(s.dataDef.Sheet)
-	if len(rows) <= 3 {
+	if err != nil {
+		s.logger.Panicf("Read %s Sheet %s got error %s", s.dataDef.Excel, s.dataDef.Sheet, err)
+	}
+	if len(rows) < 3 {
+		s.logger.Panicf("Read %s Sheet %s got %d rows", s.dataDef.Excel, s.dataDef.Sheet, len(rows))
 		return "", nil
 	}
 	line := 0
@@ -106,7 +151,7 @@ func (s *SnowSingleExporter) DoExport(filePath string, outDir string) (string, e
 			line++
 		}
 
-		s.WriteMapData(outDir)
+		s.WriteMapData()
 
 	} else {
 
@@ -122,7 +167,12 @@ func (s *SnowSingleExporter) DoExport(filePath string, outDir string) (string, e
 			line++
 		}
 
-		s.WriteData(outDir)
+		s.WriteData()
+	}
+
+	if s.cache {
+		fmt.Println(s.dataDef.Name)
+		LuaHooker.GlobalProcessReceiveData(s.dataDef.Name, s.mapdata)
 	}
 
 	return s.dataDef.Name, nil
@@ -198,27 +248,30 @@ func (s *SnowSingleExporter) ReadData(row []string) {
 	}
 }
 
-func (s *SnowSingleExporter) WriteMapData(outDir string) error {
+func (s *SnowSingleExporter) WriteMapData() error {
 	if s.tool == conf.Tool_To_Json {
-		toolMan := tojson.NewToJson(s.dataDef.Name, outDir, s.dataDef.RowFile)
-		toolMan.WriteMapData(s.mapdata)
+		toolMan := tojson.NewToJson(s.dataDef.Name, s.outDir, s.dataDef.RowFile)
+		toolMan.WriteData(s.mapdata)
 	} else if s.tool == conf.Tool_To_Lua {
-		toolMan := tolua.NewToLua(s.dataDef.Name, outDir, s.dataDef.RowFile)
-		toolMan.WriteMapData(s.mapdata)
+		toolMan := tolua.NewToLua(s.dataDef.Name, s.outDir, s.dataDef.RowFile)
+		toolMan.WriteData(s.mapdata, nil, nil, true)
 	}
 	return nil
 }
 
-func (s *SnowSingleExporter) WriteData(outDir string) error {
+func (s *SnowSingleExporter) WriteData() error {
 	outputIndexes := make([]int, 0, len(s.header))
+	keysOrder := make([]string, 0, len(s.header))
 	// 先确认导表列
 	for index, header := range s.header {
 		if header.Needed() && !header.IsExportFlag() {
 			outputIndexes = append(outputIndexes, index)
+			keysOrder = append(keysOrder, header.Key())
 		}
 	}
 
 	mapData := make(map[string]interface{})
+	rowsOrder := make([]string, 0, len(s.data))
 	for _, row := range s.data {
 		rowMap := make(map[string]interface{})
 		for _, index := range outputIndexes {
@@ -228,21 +281,38 @@ func (s *SnowSingleExporter) WriteData(outDir string) error {
 		}
 		switch row[0].(type) {
 		case string:
-			mapData[row[0].(string)] = rowMap
+			key := row[0].(string)
+			mapData[key] = rowMap
+			rowsOrder = append(rowsOrder, key)
 		case int:
-			mapData[strconv.FormatInt(int64(row[0].(int)), 10)] = rowMap
+			key := strconv.FormatInt(int64(row[0].(int)), 10)
+			mapData[key] = rowMap
+			rowsOrder = append(rowsOrder, key)
 		default:
 			s.logger.Panicf("first column is %T %v, cannot be received.", row[0], row[0])
 		}
 
 	}
+	s.mapdata = mapData
+	s.keysOrder = keysOrder
+	s.rowsOrder = rowsOrder
 
 	if s.tool == conf.Tool_To_Json {
-		toolMan := tojson.NewToJson(s.dataDef.Name, outDir, s.dataDef.RowFile)
+		toolMan := tojson.NewToJson(s.dataDef.Name, s.outDir, s.dataDef.RowFile)
 		toolMan.WriteData(mapData)
 	} else if s.tool == conf.Tool_To_Lua {
-		toolMan := tolua.NewToLua(s.dataDef.Name, outDir, s.dataDef.RowFile)
-		toolMan.WriteData(mapData)
+		toolMan := tolua.NewToLua(s.dataDef.Name, s.outDir, s.dataDef.RowFile)
+		toolMan.WriteData(mapData, s.keysOrder, s.rowsOrder, false)
 	}
 	return nil
+}
+
+func (s *SnowSingleExporter) WriteDataFromLua(mapData map[string]interface{}) {
+	if s.tool == conf.Tool_To_Json {
+		toolMan := tojson.NewToJson(s.dataDef.Name, s.outDir, s.dataDef.RowFile)
+		toolMan.WriteData(mapData)
+	} else if s.tool == conf.Tool_To_Lua {
+		toolMan := tolua.NewToLua(s.dataDef.Name, s.outDir, s.dataDef.RowFile)
+		toolMan.WriteData(mapData, s.keysOrder, s.rowsOrder, false)
+	}
 }

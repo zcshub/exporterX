@@ -227,9 +227,9 @@ var CoefficientsOfUnaryQuadraticExpressionFormat = `
 	return (a_add_b + a_sub_b)/2, (a_add_b - a_sub_b)/2, c
 `
 
-func (h *Header) parseFunc(text string, headType *HeadType) []interface{} {
+func (h *Header) parseFunc(text string, headType *HeadType) interface{} {
 	if text == "" {
-		return []interface{}{1, h.defaultValue.(int)}
+		return h.defaultValue.(int)
 	}
 
 	textLength := len(text)
@@ -308,5 +308,5 @@ func (h *Header) parseFunc(text string, headType *HeadType) []interface{} {
 	if err != nil {
 		h.logger.Panicf("%s parse to float64 failed %s", text, err)
 	}
-	return []interface{}{1, value}
+	return value
 }

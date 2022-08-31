@@ -4,9 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"math"
-	"os"
 	"runtime"
-	"runtime/pprof"
 
 	factory "exporterX/DataExporter/Factory"
 	_ "exporterX/internal/JsonParser"
@@ -39,9 +37,9 @@ func init() {
 }
 
 func main() {
-	f, _ := os.Create("cpuprofile")
-	defer f.Close()
-	pprof.StartCPUProfile(f)
+	// f, _ := os.Create("cpuprofile")
+	// defer f.Close()
+	// pprof.StartCPUProfile(f)
 	flag.Var(&exportList, "name", "DataName to export, access for multi name")
 	flag.Parse()
 	fmt.Printf("conf: %v\n", *confPath)
@@ -55,5 +53,5 @@ func main() {
 	excelExporter := app.NewExcelExporter(factory.GetConfigParser(), factory.GetDataExporter(), *confPath, optionalConf)
 	excelExporter.PrintExporterInfo()
 	excelExporter.Run()
-	pprof.StopCPUProfile()
+	// pprof.StopCPUProfile()
 }

@@ -17,6 +17,7 @@ import (
 
 type LuaHookManager struct {
 	logger   *log.Logger
+	luaLock  sync.Mutex
 	luaState *lua.LState
 	lock     sync.RWMutex
 	hooks    map[string]*lua.FunctionProto
@@ -29,6 +30,47 @@ func NewLuaHookManager() *LuaHookManager {
 		luaState: lua.NewState(),
 		hooks:    make(map[string]*lua.FunctionProto),
 	}
+}
+
+func (l *LuaHookManager) ConvertToLuaValue(element interface{}) lua.LValue {
+	switch element.(type) {
+	case float64:
+		return lua.LNumber(element.(float64))
+	case int:
+		return lua.LNumber(element.(int))
+	case string:
+		return lua.LString(element.(string))
+	case bool:
+		return lua.LBool(element.(bool))
+	case map[string]interface{}:
+		resultTable := &lua.LTable{}
+		for k, v := range element.(map[string]interface{}) {
+			resultTable.RawSetString(k, l.ConvertToLuaValue(v))
+		}
+		return resultTable
+	case []interface{}:
+		sliceTable := &lua.LTable{}
+		for _, s := range element.([]interface{}) {
+			sliceTable.Append(l.ConvertToLuaValue(s))
+		}
+		return sliceTable
+	default:
+		l.logger.Panicf("Unknown %T %v", element, element)
+	}
+	return nil
+}
+
+// MapToTable converts a Go map to a lua table
+func (l *LuaHookManager) MapToTable(m map[string]interface{}) *lua.LTable {
+	// Main table pointer
+	resultTable := &lua.LTable{}
+
+	// Loop map
+	for key, element := range m {
+		resultTable.RawSetString(key, l.ConvertToLuaValue(element))
+	}
+
+	return resultTable
 }
 
 func (m *LuaHookManager) CompileLuaFile(filePath string) (*lua.FunctionProto, error) {
@@ -132,6 +174,8 @@ func (m *LuaHookManager) GetHookHandler(dataName string, keyName string) func(te
 	}
 
 	return func(text string) interface{} {
+		m.luaLock.Lock()
+		defer m.luaLock.Unlock()
 		err := m.luaState.CallByParam(lua.P{
 			Fn:      luaFunc,
 			NRet:    1,
@@ -145,4 +189,91 @@ func (m *LuaHookManager) GetHookHandler(dataName string, keyName string) func(te
 
 		return m.ConvertLuaValue(functionName, text, ret)
 	}
+}
+
+func (m *LuaHookManager) InitGlobalProcess() []string {
+	globalProcessLua := "./hook/GlobalProcess.lua"
+	if _, err := os.Stat(globalProcessLua); errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err := m.luaState.DoFile(globalProcessLua); err != nil {
+		m.logger.Panicf("%s compile got error: %s", globalProcessLua, err)
+	}
+
+	// proto, err := LuaHooker.CompileLuaFile(globalProcessLua)
+	// if err != nil {
+	// 	m.logger.Panicf("%s compile got error: %s", globalProcessLua, err)
+	// }
+	// m.luaState.Push(m.luaState.NewFunctionFromProto(proto))
+	err := m.luaState.CallByParam(lua.P{
+		Fn:      m.luaState.GetGlobal("GlobalCacheDataList"),
+		NRet:    1,
+		Protect: true,
+	})
+	if err != nil {
+		m.logger.Panicf("%s call GlobalCacheDataList got error: %s", globalProcessLua, err)
+	}
+	cacheList := m.luaState.Get(-1).(*lua.LTable)
+	m.luaState.Pop(1)
+	cacheNameList := make([]string, 0, m.luaState.ObjLen(cacheList))
+	cacheList.ForEach(func(k, v lua.LValue) {
+		cacheNameList = append(cacheNameList, lua.LVAsString(v))
+	})
+	return cacheNameList
+}
+
+func (m *LuaHookManager) GlobalProcessReceiveData(name string, data map[string]interface{}) {
+	ltData := m.MapToTable(data)
+	m.luaLock.Lock()
+	defer m.luaLock.Unlock()
+	err := m.luaState.CallByParam(lua.P{
+		Fn:      m.luaState.GetGlobal("ReceiveCacheData"),
+		NRet:    0,
+		Protect: true,
+	}, lua.LString(name), ltData)
+	if err != nil {
+		m.logger.Panicf("globalProcessLua call ReceiveCacheData got error: %s", err)
+	}
+}
+
+func (m *LuaHookManager) GlobalProcessCacheData() {
+	m.luaLock.Lock()
+	defer m.luaLock.Unlock()
+
+	err := m.luaState.CallByParam(lua.P{
+		Fn:      m.luaState.GetGlobal("ProcessCacheData"),
+		NRet:    0,
+		Protect: true,
+	})
+	if err != nil {
+		m.logger.Panicf("globalProcessLua call ProcessCacheData got error: %s", err)
+	}
+}
+
+func (m *LuaHookManager) GlobalProcessGetChangedData() map[string]map[string]interface{} {
+	m.luaLock.Lock()
+	defer m.luaLock.Unlock()
+
+	err := m.luaState.CallByParam(lua.P{
+		Fn:      m.luaState.GetGlobal("GetChangedData"),
+		NRet:    1,
+		Protect: true,
+	})
+	if err != nil {
+		m.logger.Panicf("globalProcessLua call ProcessCacheData got error: %s", err)
+	}
+
+	changedData := m.luaState.Get(-1).(*lua.LTable)
+	m.luaState.Pop(1)
+
+	dataName2MapData := make(map[string]map[string]interface{})
+	changedData.ForEach(func(name, data lua.LValue) {
+		mapData := make(map[string]interface{})
+		data.(*lua.LTable).ForEach(func(k, row lua.LValue) {
+			r := m.ConvertLuaValue(lua.LVAsString(name), lua.LVAsString(k), row)
+			mapData[lua.LVAsString(k)] = r.(map[string]interface{})
+		})
+		dataName2MapData[lua.LVAsString(name)] = mapData
+	})
+	return dataName2MapData
 }

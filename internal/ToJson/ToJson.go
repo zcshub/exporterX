@@ -42,29 +42,7 @@ func NewToJson(dataName string, outPath string, oneRowOneFile bool) *ToJson {
 }
 
 func (t *ToJson) WriteData(data map[string]interface{}) {
-	if t.OneRowOneFile {
-		for id, row := range data {
-			filePath := path.Join(t.OutPath, id+".json")
-			content, _ := json.MarshalIndent(row, "", "\t")
-			ioutil.WriteFile(filePath, content, 0644)
-		}
-	} else {
-		filePath := path.Join(t.OutPath, t.DataName+".json")
-		content, _ := json.MarshalIndent(data, "", "\t")
-		ioutil.WriteFile(filePath, content, 0644)
-	}
-}
-
-func (t *ToJson) WriteMapData(data map[string]interface{}) {
-	if t.OneRowOneFile {
-		for id, row := range data {
-			filePath := path.Join(t.OutPath, id+".json")
-			content, _ := json.MarshalIndent(map[string]interface{}{id: row}, "", "\t")
-			ioutil.WriteFile(filePath, content, 0644)
-		}
-	} else {
-		filePath := path.Join(t.OutPath, t.DataName+".json")
-		content, _ := json.MarshalIndent(data, "", "\t")
-		ioutil.WriteFile(filePath, content, 0644)
-	}
+	filePath := path.Join(t.OutPath, t.DataName+".json")
+	content, _ := json.MarshalIndent(data, "", "\t")
+	ioutil.WriteFile(filePath, content, 0644)
 }

@@ -1,7 +1,5 @@
 package workpool
 
-import "os"
-
 type Task struct {
 	Id   string
 	Info string
@@ -18,7 +16,7 @@ type WorkPool struct {
 	tasksSize   int
 	tasksChan   chan Task
 	resultsChan chan Task
-	Results     func() []Task
+	Results     func() map[string]string
 }
 
 func NewWorkPool(tasks []Task, poolsize int) *WorkPool {
@@ -45,21 +43,25 @@ func (p *WorkPool) Start() {
 }
 
 func (p *WorkPool) work(n int) {
-	defer func() {
-		if e := recover(); e != nil {
-			os.Exit(1)
-		}
-	}()
+	// defer func() {
+	// 	if e := recover(); e != nil {
+	// 		os.Exit(1)
+	// 	}
+	// }()
 	for task := range p.tasksChan {
 		task.Info, task.Err = task.Do(n)
 		p.resultsChan <- task
 	}
 }
 
-func (p *WorkPool) results() []Task {
-	tasks := make([]Task, p.tasksSize)
+func (p *WorkPool) results() map[string]string {
+	result := make(map[string]string)
 	for i := 0; i < p.tasksSize; i++ {
-		tasks[i] = <-p.resultsChan
+		task := <-p.resultsChan
+		if _, ok := result[task.Id]; ok {
+			panic("Duplicate " + task.Id)
+		}
+		result[task.Id] = task.Info
 	}
-	return tasks
+	return result
 }

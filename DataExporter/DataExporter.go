@@ -17,8 +17,10 @@ type ConfigParser interface {
 
 type DataExporter interface {
 	Version() string
+	Init()
 	DoExport(n int, tool string, filePath string, outDir string, dataDef *DataDefine) (string, error)
 	SetCpuNum(int)
+	AfterExport()
 }
 
 type OptionalConf struct {
@@ -64,14 +66,6 @@ func (e *ExcelExporter) PrintExporterInfo() {
 	}
 	fmt.Printf("Exporter tool is [%s].\n", e.exporter.Version())
 	fmt.Println("------------------------------------------------------")
-}
-
-func (e *ExcelExporter) BeforeExportData() {
-
-}
-
-func (e *ExcelExporter) AfterExportData() {
-
 }
 
 func (e *ExcelExporter) PrepareExport() error {
@@ -127,13 +121,18 @@ func (e *ExcelExporter) PrepareExport() error {
 	return err
 }
 
+func (e *ExcelExporter) BeforeExportData() {
+	e.exporter.Init()
+}
+
 func (e *ExcelExporter) DoExport() {
 	tasks := make([]workpool.Task, 0, 16)
+	ignores := make([]string, 0, 2)
 	for _, dataDef := range e.dataDef {
 		filePath := path.Join(e.srcDir, dataDef.Excel)
 		exist, _ := pathExists(filePath)
 		if !exist {
-			log.Printf("Ignore %s, %s not exist", dataDef.Name, dataDef.Excel)
+			ignores = append(ignores, fmt.Sprintf("%s, %s not found", dataDef.Name, dataDef.Excel))
 			continue
 		}
 		dataDefCp := dataDef
@@ -144,7 +143,25 @@ func (e *ExcelExporter) DoExport() {
 	}
 	e.workPool = workpool.NewWorkPool(tasks, e.cpuNum)
 	e.workPool.Start()
-	e.workPool.Results()
+	results := e.workPool.Results()
+
+	for _, ignore := range ignores {
+		log.Printf(ignore)
+	}
+
+	for _, dataDef := range e.dataDef {
+		if _, ok := results[dataDef.Name]; ok {
+			delete(results, dataDef.Name)
+		} else {
+			log.Printf("%s export failed", dataDef.Name)
+		}
+	}
+}
+
+func (e *ExcelExporter) AfterExportData() {
+	log.Println("==================================")
+	log.Println("Next is programers's Data analysis")
+	e.exporter.AfterExport()
 }
 
 func (e *ExcelExporter) Run() {

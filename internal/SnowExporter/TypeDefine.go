@@ -194,6 +194,9 @@ func toFloat(r string) float64 {
 
 func toStr(r string) string {
 	if r != "" {
+		if len(r) != len(strings.Trim(r, "\"")) {
+			log.Panicf("Str type no quites needed, got %v", r)
+		}
 		return r
 	}
 	return ""
