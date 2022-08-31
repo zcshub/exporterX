@@ -20,7 +20,6 @@ func NewToJson(dataName string, outPath string, oneRowOneFile bool) *ToJson {
 	logger := log.New(os.Stdout, "["+dataName+"]: ", log.Lshortfile)
 	if _, err := os.Stat(path.Join(outPath, dataName+".json")); err == nil {
 		err := os.Remove(path.Join(outPath, dataName+".json"))
-		_ = os.Remove(path.Join(outPath, dataName+".json.meta"))
 		if err != nil {
 			logger.Panicf("%s is oneRowOneFile, delete %s got error %s", dataName, path.Join(outPath, dataName+".json"), err.Error())
 		}

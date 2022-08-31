@@ -1,8 +1,8 @@
 {
     "tool": "to_json",
     "cpu_num": 1,
-    "src_dir": "D:/WorkSpace/Projects/exporterX/designer_data/数值表",
-    "out_dir": "C:/snowstudio/game_client/Assets/Script/Lua/DataTables/ClientData",
+    "src_dir": "C:\\snowstudio\\designer_data\\数值表",
+    "out_dir": "C:\\snowstudio\\game_client\\Assets\\Script\\Lua\\DataTables\\ClientData",
     "data_def": [
     {"name": "RichColor", "excel": "文本样式表.xlsx", "sheet": "全局颜色表"}
     ]

@@ -40,14 +40,12 @@ func NewToLua(dataName string, outPath string, oneRowOneFile bool) *ToLua {
 	logger := log.New(os.Stdout, "["+dataName+"]: ", log.Lshortfile)
 	if _, err := os.Stat(path.Join(outPath, dataName)); err == nil {
 		err := os.RemoveAll(path.Join(outPath, dataName))
-		_ = os.Remove(path.Join(outPath, dataName+".meta"))
 		if err != nil {
 			logger.Panicf("delete %s got error %s", path.Join(outPath, dataName), err.Error())
 		}
 	}
 	if _, err := os.Stat(path.Join(outPath, dataName+".lua")); err == nil {
 		err := os.Remove(path.Join(outPath, dataName+".lua"))
-		_ = os.Remove(path.Join(outPath, dataName+".lua.meta"))
 		if err != nil {
 			logger.Panicf("delete %s got error %s", path.Join(outPath, dataName+".lua"), err.Error())
 		}
