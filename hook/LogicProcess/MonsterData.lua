@@ -55,7 +55,7 @@ function M.replaceTemplateData(monsterData, mongterTemplateData)
         if value["Template"] ~= "" then
             local templateData = mongterTemplateData[value["Template"]]
             for k, v in pairs(templateData) do
-                if k ~= 'Id' then
+                if k ~= 'Id' and v ~= 0 then
                     value[k] = getFuncData(v, value["Level"])
                 end
             end

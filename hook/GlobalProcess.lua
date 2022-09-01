@@ -1,3 +1,5 @@
+local AchievementData = require("hook.LogicProcess.AchievementData")
+local ShopRefreshData = require("hook.LogicProcess.ShopRefreshData")
 local MonsterData = require("hook.LogicProcess.MonsterData")
 
 local cacheData = {}
@@ -6,11 +8,15 @@ local changedData = {}
 -- 要缓存的数据列表
 function GlobalCacheDataList()
     return {
+        "AchievementData",
+        "AchievementTabData",
+
         "MonsterData",
         "MonsterTemplateData",
 
         "TaskData",
 
+        "ShopRefreshData",
     }
 end
 
@@ -36,6 +42,8 @@ end
 function ProcessCacheData()
     local monsterData = MonsterData.replaceTemplateData(cacheData["MonsterData"], cacheData["MonsterTemplateData"])
     changedData["MonsterData"] = monsterData
+    changedData['ShopRefreshData'] = ShopRefreshData.handle(cacheData["ShopRefreshData"])
+    changedData['AchievementData'], changedData["AchievementTabData"] = AchievementData.handle(cacheData['AchievementData'], cacheData["AchievementTabData"])
 end
 
 -- 获取改变的数据

@@ -310,6 +310,60 @@ func (s *SnowSingleExporter) WriteDataFromLua(mapData map[string]interface{}) {
 		toolMan := tojson.NewToJson(s.dataDef.Name, s.outDir, s.dataDef.RowFile)
 		toolMan.WriteData(mapData)
 	} else if s.tool == conf.Tool_To_Lua {
+		newKeys := make(map[string]bool, 0)
+		for _, row := range mapData {
+			for key := range row.(map[string]interface{}) {
+				newKeys[key] = true
+			}
+			break
+		}
+
+		keysOrder := make([]string, 0, len(mapData))
+		for _, key := range s.keysOrder {
+			if _, exist := newKeys[key]; exist {
+				keysOrder = append(keysOrder, key)
+			}
+		}
+
+		for k := range newKeys {
+			exist := false
+			for _, key := range keysOrder {
+				if key == k {
+					exist = true
+					break
+				}
+			}
+			if exist == false {
+				keysOrder = append(keysOrder, k)
+			}
+		}
+
+		s.keysOrder = keysOrder
+
+		newRowsKey := make(map[string]bool)
+		for k := range mapData {
+			newRowsKey[k] = true
+		}
+		rowsOrder := make([]string, 0, len(s.rowsOrder))
+		for _, rowKey := range s.rowsOrder {
+			if _, exist := newRowsKey[rowKey]; exist {
+				rowsOrder = append(rowsOrder, rowKey)
+			}
+		}
+		for k := range newRowsKey {
+			exist := false
+			for _, key := range rowsOrder {
+				if key == k {
+					exist = true
+					break
+				}
+			}
+			if exist == false {
+				rowsOrder = append(rowsOrder, k)
+			}
+		}
+		s.rowsOrder = rowsOrder
+
 		toolMan := tolua.NewToLua(s.dataDef.Name, s.outDir, s.dataDef.RowFile)
 		toolMan.WriteData(mapData, s.keysOrder, s.rowsOrder, false)
 	}
