@@ -280,10 +280,19 @@ func (s *SnowSingleExporter) WriteData() error {
 		switch row[0].(type) {
 		case string:
 			key := row[0].(string)
+			if _, exist := mapData[key]; exist {
+				s.logger.Panicf("duplicate key %v row %v", key, row)
+			}
 			mapData[key] = rowMap
 			rowsOrder = append(rowsOrder, key)
 		case int:
+			if row[0].(int) == 0 {
+				continue
+			}
 			key := strconv.FormatInt(int64(row[0].(int)), 10)
+			if _, exist := mapData[key]; exist {
+				s.logger.Panicf("duplicate key %v row %v", key, row)
+			}
 			mapData[key] = rowMap
 			rowsOrder = append(rowsOrder, key)
 		default:
