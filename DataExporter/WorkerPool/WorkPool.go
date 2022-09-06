@@ -1,5 +1,7 @@
 package workpool
 
+import "os"
+
 type Task struct {
 	Id   string
 	Info string
@@ -43,11 +45,11 @@ func (p *WorkPool) Start() {
 }
 
 func (p *WorkPool) work(n int) {
-	// defer func() {
-	// 	if e := recover(); e != nil {
-	// 		os.Exit(1)
-	// 	}
-	// }()
+	defer func() {
+		if e := recover(); e != nil {
+			os.Exit(1)
+		}
+	}()
 	for task := range p.tasksChan {
 		task.Info, task.Err = task.Do(n)
 		p.resultsChan <- task

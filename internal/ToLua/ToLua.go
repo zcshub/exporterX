@@ -2,7 +2,6 @@ package tolua
 
 import (
 	"bytes"
-	"errors"
 	"io/ioutil"
 	"log"
 	"os"
@@ -51,38 +50,28 @@ func NewToLua(dataName string, outPath string, oneRowOneFile bool) *ToLua {
 		}
 	}
 	if oneRowOneFile {
-		outPath = path.Join(outPath, dataName)
-		err := os.RemoveAll(outPath)
+		dirPath := path.Join(outPath, dataName)
+		err := os.RemoveAll(dirPath)
 		if err != nil {
 			logger.Panicf("Prepare directory %s got error: %s", outPath, err.Error())
 		}
-		if _, err := os.Stat(outPath); errors.Is(err, os.ErrNotExist) {
-			err := os.Mkdir(outPath, os.ModePerm)
-			if err != nil {
-				logger.Panicf("Mkdir %s got error: %s", outPath, err.Error())
-			}
+		err = os.Mkdir(dirPath, os.ModePerm)
+		if err != nil {
+			logger.Panicf("Mkdir %s got error: %s", outPath, err.Error())
 		}
 	}
 	return &ToLua{logger, dataName, outPath, oneRowOneFile}
 }
 
-func (t *ToLua) writeLuaFile(filePath string, keysStr string, content string) {
+func (t *ToLua) writeLuaFile(filePath string, elem ...string) {
 	var buffer bytes.Buffer
-	buffer.WriteString(keysStr)
-	buffer.WriteString(luaFilePrefix)
-	buffer.WriteString(content)
-	buffer.WriteString("\n")
-	buffer.WriteString(luaFileSuffix1)
-	ioutil.WriteFile(filePath, buffer.Bytes(), 0644)
-}
-
-func (t *ToLua) writeLuaMapFile(filePath string, content string) {
-	var buffer bytes.Buffer
-	buffer.WriteString(luaFilePrefix)
-	buffer.WriteString(content)
-	buffer.WriteString("\n")
-	buffer.WriteString(luaFileSuffix2)
-	ioutil.WriteFile(filePath, buffer.Bytes(), 0644)
+	for _, e := range elem {
+		buffer.WriteString(e)
+	}
+	err := ioutil.WriteFile(filePath, buffer.Bytes(), 0644)
+	if err != nil {
+		t.logger.Panicf(err.Error())
+	}
 }
 
 // 规整数据，将map无序数据转换到打印成lua table的样式
@@ -126,22 +115,72 @@ func (t *ToLua) convertKeysToLuaUse(data map[string]int) string {
 	return buffer.String()
 }
 
+func (t *ToLua) convertIndexesToLuaUse(indexes []string) string {
+	if len(indexes) == 0 {
+		return ""
+	}
+	isIntKey := false
+	if _, err := strconv.Atoi(indexes[0]); err == nil {
+		isIntKey = true
+	}
+
+	var buffer bytes.Buffer
+	buffer.WriteString("{")
+	if isIntKey {
+		intIndexes := make([]int, 0, len(indexes))
+		for _, index := range indexes {
+			intIndex, _ := strconv.Atoi(index)
+			intIndexes = append(intIndexes, intIndex)
+		}
+		sort.Ints(intIndexes)
+		for _, index := range intIndexes {
+			buffer.WriteString(strconv.Itoa(index))
+			buffer.WriteString(",")
+		}
+	} else {
+		sort.Strings(indexes)
+		for _, index := range indexes {
+			buffer.WriteString("\"")
+			buffer.WriteString(index)
+			buffer.WriteString("\"")
+			buffer.WriteString(",")
+		}
+	}
+
+	buffer.WriteString("}")
+	return buffer.String()
+}
+
 func (t *ToLua) WriteData(data map[string]interface{}, keysOrder []string, rowsOder []string, isMap bool) {
 	filePath := path.Join(t.OutPath, t.DataName+".lua")
 	if !isMap {
-		keys, formatdata := t.optimizeDataForLuaUse(data, keysOrder, rowsOder)
-		keysStr := t.convertKeysToLuaUse(keys)
-		var content bytes.Buffer
-		content.WriteString("{\n")
-		for _, row := range formatdata {
-			content.WriteString("[")
-			content.WriteString(t.convertData(row.([]interface{})[0]))
-			content.WriteString("]\t=\t")
-			content.WriteString(t.convertData(row))
-			content.WriteString(",\n")
+		if t.OneRowOneFile {
+			indexes := make([]string, 0, len(data))
+			for id, row := range data {
+				var content bytes.Buffer
+				indexes = append(indexes, id)
+				filePath = path.Join(t.OutPath, t.DataName, id+".lua")
+				content.WriteString(t.convertData(row))
+				t.writeLuaFile(filePath, luaFilePrefix, content.String(), "\n", luaFileSuffix2)
+			}
+			filePath = path.Join(t.OutPath, t.DataName, "index.lua")
+			indexesStr := t.convertIndexesToLuaUse(indexes)
+			t.writeLuaFile(filePath, luaFilePrefix, indexesStr, "\n", luaFileSuffix2)
+		} else {
+			var content bytes.Buffer
+			keys, formatdata := t.optimizeDataForLuaUse(data, keysOrder, rowsOder)
+			content.WriteString("{\n")
+			for _, row := range formatdata {
+				content.WriteString("[")
+				content.WriteString(t.convertData(row.([]interface{})[0]))
+				content.WriteString("]\t=\t")
+				content.WriteString(t.convertData(row))
+				content.WriteString(",\n")
+			}
+			content.WriteString("}\n")
+			keysStr := t.convertKeysToLuaUse(keys)
+			t.writeLuaFile(filePath, keysStr, luaFilePrefix, content.String(), "\n", luaFileSuffix1)
 		}
-		content.WriteString("}\n")
-		t.writeLuaFile(filePath, keysStr, content.String())
 	} else {
 		sortedKey := make([]string, 0, len(data))
 		for k := range data {
@@ -159,7 +198,7 @@ func (t *ToLua) WriteData(data map[string]interface{}, keysOrder []string, rowsO
 			content.WriteString(",\n")
 		}
 		content.WriteString("}\n")
-		t.writeLuaMapFile(filePath, content.String())
+		t.writeLuaFile(filePath, luaFilePrefix, content.String(), "\n", luaFileSuffix2)
 	}
 }
 
