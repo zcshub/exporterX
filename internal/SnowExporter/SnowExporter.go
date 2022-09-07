@@ -56,7 +56,7 @@ func (s *SnowExporter) DoExport(n int, tool string, filePath string, outDir stri
 		panic("Cannot use tool: " + tool)
 	}
 	sse := &SnowSingleExporter{
-		logger:       log.New(os.Stdout, "["+dataDef.Name+"] ", log.Lshortfile),
+		logger:       log.New(os.Stdout, "["+dataDef.Excel+" "+dataDef.Sheet+"]", log.Lshortfile),
 		n:            n,
 		tool:         tool,
 		filePath:     filePath,
