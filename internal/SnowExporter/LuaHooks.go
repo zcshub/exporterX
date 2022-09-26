@@ -3,6 +3,7 @@ package snowExporter
 import (
 	"bufio"
 	"errors"
+	"io/ioutil"
 	"log"
 	"math"
 	"os"
@@ -15,12 +16,13 @@ import (
 	"github.com/yuin/gopher-lua/parse"
 )
 
+const HookLuaPath = "./hook/"
+
 type LuaHookManager struct {
 	logger   *log.Logger
 	luaLock  sync.Mutex
 	luaState *lua.LState
-	lock     sync.RWMutex
-	hooks    map[string]*lua.FunctionProto
+	hookMap  sync.Map
 }
 
 func NewLuaHookManager() *LuaHookManager {
@@ -28,7 +30,29 @@ func NewLuaHookManager() *LuaHookManager {
 	return &LuaHookManager{
 		logger:   logger,
 		luaState: lua.NewState(),
-		hooks:    make(map[string]*lua.FunctionProto),
+	}
+}
+
+func (l *LuaHookManager) PrepareHookFunction() {
+	files, err := ioutil.ReadDir(HookLuaPath)
+	if err != nil {
+		l.logger.Panicf("ReadDir %s failed error: %s", HookLuaPath, err)
+	}
+
+	for _, file := range files {
+		if strings.HasSuffix(file.Name(), ".lua") {
+			path := path.Join(HookLuaPath, file.Name())
+			proto, err := l.CompileLuaFile(path)
+			if err != nil {
+				l.logger.Panicf("%s compile got error: %s", path, err)
+			}
+			l.luaState.Push(l.luaState.NewFunctionFromProto(proto))
+			err = l.luaState.PCall(0, lua.MultRet, nil)
+			if err != nil {
+				l.logger.Panicf("%s pcall got error: %s", path, err)
+			}
+			l.hookMap.Store(strings.TrimSuffix(file.Name(), ".lua"), proto)
+		}
 	}
 }
 
@@ -145,26 +169,8 @@ func (m *LuaHookManager) ConvertLuaValue(functionName string, text string, value
 }
 
 func (m *LuaHookManager) GetHookHandler(dataName string, keyName string) func(text string) interface{} {
-	if _, ok := m.hooks[dataName]; !ok {
-		path := path.Join("./hook/", dataName+".lua")
-		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
-
-		proto, err := m.CompileLuaFile(path)
-		if err != nil {
-			m.logger.Panicf("%s compile got error: %s", path, err)
-		}
-
-		m.luaState.Push(m.luaState.NewFunctionFromProto(proto))
-		err = m.luaState.PCall(0, lua.MultRet, nil)
-		if err != nil {
-			m.logger.Panicf("%s pcall got error: %s", path, err)
-		}
-
-		m.lock.Lock()
-		m.hooks[dataName] = proto
-		m.lock.Unlock()
+	if _, ok := m.hookMap.Load(dataName); !ok {
+		return nil
 	}
 
 	functionName := dataName + "_" + keyName

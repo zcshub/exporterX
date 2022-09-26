@@ -43,17 +43,16 @@ func NewExcelExporter(parser *ConfigParser, exporter *DataExporter, confPath str
 }
 
 type ExcelExporter struct {
-	parser          ConfigParser
-	exporter        DataExporter
-	confPath        string
-	srcDir          string
-	outDir          string
-	tool            string
-	cpuNum          int
-	needDataRewrite bool
-	dataDef         []DataDefine
-	exportList      []string
-	workPool        *workpool.WorkPool
+	parser     ConfigParser
+	exporter   DataExporter
+	confPath   string
+	srcDir     string
+	outDir     string
+	tool       string
+	cpuNum     int
+	dataDef    []DataDefine
+	exportList []string
+	workPool   *workpool.WorkPool
 }
 
 func (e *ExcelExporter) PrintExporterInfo() {
@@ -98,10 +97,8 @@ func (e *ExcelExporter) PrepareExport() error {
 				}
 			}
 		}
-		e.needDataRewrite = false
 	} else {
 		e.dataDef = configData.DataDef
-		e.needDataRewrite = true
 	}
 	e.exportList = nil
 
@@ -164,7 +161,7 @@ func (e *ExcelExporter) DoExport() {
 }
 
 func (e *ExcelExporter) AfterExportData() {
-	if e.needDataRewrite == false || e.tool != Tool_To_Lua {
+	if e.tool != Tool_To_Lua {
 		return
 	}
 	log.Println("==================================")

@@ -27,6 +27,7 @@ func init() {
 		logger: log.New(os.Stdout, "[SnowExporter]: ", log.Lshortfile),
 	})
 	LuaHooker = NewLuaHookManager()
+	LuaHooker.PrepareHookFunction()
 }
 
 type SnowExporter struct {
