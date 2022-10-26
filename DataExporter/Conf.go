@@ -6,6 +6,7 @@ type DataDefine struct {
 	Sheet     string `json:"sheet"`
 	RowFile   bool   `json:"rowFile"`
 	IsMapData bool   `json:"isMap"`
+	SubPath   string `json:"subPath"`
 }
 
 type ExportConf struct {
