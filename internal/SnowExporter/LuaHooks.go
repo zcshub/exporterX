@@ -149,13 +149,36 @@ func (m *LuaHookManager) ConvertLuaValue(functionName string, text string, value
 		mapData := make(map[string]interface{})
 		listData := make([]interface{}, 0)
 		isMap := false
+		numArray := make(map[int]bool)
 		value.(*lua.LTable).ForEach(func(k lua.LValue, v lua.LValue) {
 			if lua.LVAsNumber(k) == lua.LNumber(0) {
-				mapData[lua.LVAsString(k)] = m.ConvertLuaValue(functionName, text, v)
 				isMap = true
+				return
+			} else {
+				index, _ := strconv.ParseInt(lua.LVAsNumber(k).String(), 10, 64)
+				numArray[int(index)] = true
+			}
+		})
+		if !isMap {
+			for i := 1; i <= len(numArray); i++ {
+				if _, ok := numArray[i]; !ok {
+					isMap = true
+					break
+				}
+			}
+		}
+		value.(*lua.LTable).ForEach(func(k lua.LValue, v lua.LValue) {
+			if isMap {
+				mapData[lua.LVAsString(k)] = m.ConvertLuaValue(functionName, text, v)
 			} else {
 				listData = append(listData, m.ConvertLuaValue(functionName, text, v))
 			}
+			// if lua.LVAsNumber(k) == lua.LNumber(0) {
+			// 	mapData[lua.LVAsString(k)] = m.ConvertLuaValue(functionName, text, v)
+			// 	isMap = true
+			// } else {
+			// 	listData = append(listData, m.ConvertLuaValue(functionName, text, v))
+			// }
 		})
 		if isMap {
 			return mapData

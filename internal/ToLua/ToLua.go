@@ -10,9 +10,12 @@ import (
 	"strconv"
 )
 
-var luaFilePrefix = `local _M =
+var luaFilePrefix1 = `local _M =
 `
-var luaFileSuffix1 = `local meta = {
+var luaFilePrefixET = `local _ET = {}
+`
+var luaFileSuffix1 = `
+local meta = {
     __index = function(t, k)
         if key[k] == nil then
             return nil
@@ -26,17 +29,22 @@ end
 
 return _M`
 
-var luaFileSuffix2 = `return _M`
+var luaFileSuffix2 = `
+return _M`
 
 type ToLua struct {
 	logger        *log.Logger
 	DataName      string
 	OutPath       string
 	OneRowOneFile bool
+	hasEmptyTable bool
 }
 
 func NewToLua(dataName string, outPath string, oneRowOneFile bool) *ToLua {
 	logger := log.New(os.Stdout, "["+dataName+"]: ", log.Lshortfile)
+	if _, err := os.Stat(outPath); os.IsNotExist(err) {
+		os.MkdirAll(outPath, os.ModePerm)
+	}
 	if _, err := os.Stat(path.Join(outPath, dataName)); err == nil {
 		err := os.RemoveAll(path.Join(outPath, dataName))
 		if err != nil {
@@ -60,7 +68,7 @@ func NewToLua(dataName string, outPath string, oneRowOneFile bool) *ToLua {
 			logger.Panicf("Mkdir %s got error: %s", outPath, err.Error())
 		}
 	}
-	return &ToLua{logger, dataName, outPath, oneRowOneFile}
+	return &ToLua{logger, dataName, outPath, oneRowOneFile, false}
 }
 
 func (t *ToLua) writeLuaFile(filePath string, elem ...string) {
@@ -161,11 +169,15 @@ func (t *ToLua) WriteData(data map[string]interface{}, keysOrder []string, rowsO
 				indexes = append(indexes, id)
 				filePath = path.Join(t.OutPath, t.DataName, id+".lua")
 				content.WriteString(t.convertData(row))
-				t.writeLuaFile(filePath, luaFilePrefix, content.String(), "\n", luaFileSuffix2)
+				if t.hasEmptyTable {
+					t.writeLuaFile(filePath, luaFilePrefixET, luaFilePrefix1, content.String(), luaFileSuffix2)
+				} else {
+					t.writeLuaFile(filePath, luaFilePrefix1, content.String(), luaFileSuffix2)
+				}
 			}
 			filePath = path.Join(t.OutPath, t.DataName, "index.lua")
 			indexesStr := t.convertIndexesToLuaUse(indexes)
-			t.writeLuaFile(filePath, luaFilePrefix, indexesStr, "\n", luaFileSuffix2)
+			t.writeLuaFile(filePath, luaFilePrefix1, indexesStr, luaFileSuffix2)
 		} else {
 			var content bytes.Buffer
 			keys, formatdata := t.optimizeDataForLuaUse(data, keysOrder, rowsOder)
@@ -179,7 +191,11 @@ func (t *ToLua) WriteData(data map[string]interface{}, keysOrder []string, rowsO
 			}
 			content.WriteString("}\n")
 			keysStr := t.convertKeysToLuaUse(keys)
-			t.writeLuaFile(filePath, keysStr, luaFilePrefix, content.String(), "\n", luaFileSuffix1)
+			if t.hasEmptyTable {
+				t.writeLuaFile(filePath, keysStr, luaFilePrefixET, luaFilePrefix1, content.String(), luaFileSuffix1)
+			} else {
+				t.writeLuaFile(filePath, keysStr, luaFilePrefix1, content.String(), luaFileSuffix1)
+			}
 		}
 	} else {
 		sortedKey := make([]string, 0, len(data))
@@ -198,7 +214,11 @@ func (t *ToLua) WriteData(data map[string]interface{}, keysOrder []string, rowsO
 			content.WriteString(",\n")
 		}
 		content.WriteString("}\n")
-		t.writeLuaFile(filePath, luaFilePrefix, content.String(), "\n", luaFileSuffix2)
+		if t.hasEmptyTable {
+			t.writeLuaFile(filePath, luaFilePrefixET, luaFilePrefix1, content.String(), luaFileSuffix2)
+		} else {
+			t.writeLuaFile(filePath, luaFilePrefix1, content.String(), luaFileSuffix2)
+		}
 	}
 }
 
@@ -244,35 +264,44 @@ func (t *ToLua) convertStr(a string) string {
 
 func (t *ToLua) convertList(a []interface{}) string {
 	var buffer bytes.Buffer
-	buffer.WriteString("{")
-	for _, elem := range a {
-		buffer.WriteString(t.convertData(elem))
-		buffer.WriteString(", ")
+	if len(a) > 0 {
+		buffer.WriteString("{")
+		for _, elem := range a {
+			buffer.WriteString(t.convertData(elem))
+			buffer.WriteString(", ")
+		}
+		buffer.WriteString("}")
+	} else {
+		t.hasEmptyTable = true
+		buffer.WriteString("_ET")
 	}
-	buffer.WriteString("}")
 	return buffer.String()
 }
 
 func (t *ToLua) convertDict(a map[string]interface{}) string {
 	var buffer bytes.Buffer
 
-	sortedKey := make([]string, 0, len(a))
-	for k := range a {
-		sortedKey = append(sortedKey, k)
+	if len(a) > 0 {
+		sortedKey := make([]string, 0, len(a))
+		for k := range a {
+			sortedKey = append(sortedKey, k)
+		}
+		sort.Strings(sortedKey)
+		buffer.WriteString("{")
+		for _, k := range sortedKey {
+			v := a[k]
+			buffer.WriteString("[")
+			buffer.WriteString(t.convertData(k))
+			buffer.WriteString("]")
+			buffer.WriteString(" = ")
+			buffer.WriteString(t.convertData(v))
+			buffer.WriteString(",")
+		}
+		buffer.WriteString("}")
+	} else {
+		t.hasEmptyTable = true
+		buffer.WriteString("_ET")
 	}
-	sort.Strings(sortedKey)
-
-	buffer.WriteString("{")
-	for _, k := range sortedKey {
-		v := a[k]
-		buffer.WriteString("[")
-		buffer.WriteString(t.convertData(k))
-		buffer.WriteString("]")
-		buffer.WriteString(" = ")
-		buffer.WriteString(t.convertData(v))
-		buffer.WriteString(",")
-	}
-	buffer.WriteString("}")
 
 	return buffer.String()
 }

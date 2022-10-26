@@ -22,6 +22,7 @@ type Header struct {
 
 func NewHeader(n int, dataName string, name string, index int, headType *HeadType, defaultValue interface{}) *Header {
 	key := strings.Replace(name, " ", "", -1)
+	key = strings.Replace(key, "\n", "", -1)
 	hooker := LuaHooker.GetHookHandler(dataName, name)
 	return &Header{
 		logger:       log.New(os.Stdout, "["+dataName+"]: ", log.Lshortfile),

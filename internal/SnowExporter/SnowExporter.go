@@ -7,6 +7,7 @@ import (
 	tolua "exporterX/internal/ToLua"
 	"log"
 	"os"
+	"path"
 	"strconv"
 	"strings"
 	"sync"
@@ -61,7 +62,7 @@ func (s *SnowExporter) DoExport(n int, tool string, filePath string, outDir stri
 		n:            n,
 		tool:         tool,
 		filePath:     filePath,
-		outDir:       outDir,
+		outDir:       path.Join(outDir, dataDef.SubPath),
 		dataDef:      dataDef,
 		headType:     make([]*HeadType, 0, 4),
 		defaultValue: make([]interface{}, 0, 4),
